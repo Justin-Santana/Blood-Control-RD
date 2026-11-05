@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Menú de navegación</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Roboto:wght@600&display=swap"
+    rel="stylesheet"
+  />
+
+  <style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  .side-nav {
+    --nav-background: #981a1a;
+    --item-background: #ff383c;
+
+    position: relative;
+    width: 240px;
+    height: 640px;
+    background: var(--nav-background);
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%);
+    font-family: "Roboto", sans-serif;
+  }
+
+  .side-nav__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .side-nav__item {
+    position: absolute;
+    left: 12px;
+    width: 216px;
+  }
+
+  .side-nav__link {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    background: var(--item-background);
+    color: #000;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 16px;
+  }
+
+  .side-nav__label,
+  .side-nav__icon {
+    position: absolute;
+    display: block;
+  }
+
+  .side-nav__label {
+    white-space: nowrap;
+  }
+
+  .side-nav__icon {
+    color: #fff;
+    overflow: hidden;
+  }
+
+  .side-nav__link:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+  }
+
+  /* Inicio */
+
+  .side-nav__item--home {
+    top: 28px;
+    height: 59px;
+  }
+
+  .side-nav__item--home .side-nav__icon {
+    left: 15px;
+    top: 18px;
+    width: 27px;
+    height: 23px;
+  }
+
+  .side-nav__item--home .side-nav__label {
+    left: 54px;
+    top: 21.5px;
+  }
+
+  /* Fármacos */
+
+  .side-nav__item--medication {
+    top: 96px;
+    height: 53px;
+  }
+
+  .side-nav__item--medication .side-nav__icon {
+    left: 12px;
+    top: 14px;
+    width: 31px;
+    height: 24px;
+  }
+
+  .side-nav__item--medication .side-nav__label {
+    left: 52px;
+    top: 21px;
+  }
+
+  /* Distribución y trazabilidad */
+
+  .side-nav__item--distribution {
+    top: 160px;
+    height: 52px;
+  }
+
+  .side-nav__item--distribution .side-nav__icon {
+    left: 15px;
+    top: 11px;
+    width: 23px;
+    height: 26px;
+  }
+
+  .side-nav__item--distribution .side-nav__label {
+    left: 41px;
+    top: 19px;
+  }
+
+  /* Donantes voluntarios */
+
+  .side-nav__item--donors {
+    top: 229px;
+    height: 52px;
+  }
+
+  .side-nav__item--donors .side-nav__icon {
+    left: 15px;
+    top: 14px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .side-nav__item--donors .side-nav__label {
+    left: 42px;
+    top: 18px;
+  }
+
+  /* Geolocalización */
+
+  .side-nav__item--location {
+    top: 301px;
+    height: 52px;
+  }
+
+  .side-nav__item--location .side-nav__icon {
+    left: 16px;
+    top: 14px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .side-nav__item--location .side-nav__label {
+    left: 45px;
+    top: 18px;
+  }
+
+  /* Inventario y disponibilidad */
+
+  .side-nav__item--inventory {
+    top: 372px;
+    height: 52px;
+  }
+
+  .side-nav__item--inventory .side-nav__icon {
+    left: 16px;
+    top: 14px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .side-nav__item--inventory .side-nav__label {
+    left: 43px;
+    top: 18px;
+  }
+</style>
+
+
+</head>
+
+<body>
+  <nav class="side-nav" aria-label="Navegación principal">
+    <ul class="side-nav__list">
+
+      <!-- Inicio -->
+      <li class="side-nav__item side-nav__item--home">
+        <a class="side-nav__link" href="#inicio">
+          <svg
+            class="side-nav__icon"
+            viewBox="0 0 27 23"
+            fill="none"
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M10.125 21.0833V11.5H16.875V21.0833M3.375 8.62496L13.5 1.91663L23.625 8.62496V19.1666C23.625 19.675 23.3879 20.1625 22.966 20.5219C22.544 20.8814 21.9717 21.0833 21.375 21.0833H5.625C5.02826 21.0833 4.45597 20.8814 4.03401 20.5219C3.61205 20.1625 3.375 19.675 3.375 19.1666V8.62496Z"
+              stroke="currentColor"
+              stroke-width="4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span class="side-nav__label">Inicio</span>
+        </a>
+      </li>
+
+      <!-- Fármacos -->
+      <li class="side-nav__item side-nav__item--medication">
+        <a class="side-nav__link" href="#farmacos">
+          <svg
+            class="side-nav__icon"
+            viewBox="0 0 31 24"
+            fill="none"
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M13.5625 9H17.4375V12H21.3125V15H17.4375V18H13.5625V15H9.6875V12H13.5625V9Z"
+              fill="currentColor"
+            />
+            <path
+              d="M3.875 1.5C3.875 1.10218 4.07913 0.720644 4.44248 0.43934C4.80583 0.158035 5.29864 0 5.8125 0H25.1875C25.7014 0 26.1942 0.158035 26.5575 0.43934C26.9209 0.720644 27.125 1.10218 27.125 1.5V4.5C27.125 4.89782 26.9209 5.27936 26.5575 5.56066C26.1942 5.84196 25.7014 6 25.1875 6V21.75C25.1875 22.3467 24.8813 22.919 24.3363 23.341C23.7913 23.7629 23.052 24 22.2812 24H8.71875C7.94796 24 7.20875 23.7629 6.66372 23.341C6.11869 22.919 5.8125 22.3467 5.8125 21.75V6C5.29864 6 4.80583 5.84196 4.44248 5.56066C4.07913 5.27936 3.875 4.89782 3.875 4.5V1.5ZM7.75 6V21.75C7.75 21.9489 7.85206 22.1397 8.03374 22.2803C8.21542 22.421 8.46182 22.5 8.71875 22.5H22.2812C22.5382 22.5 22.7846 22.421 22.9663 22.2803C23.1479 22.1397 23.25 21.9489 23.25 21.75V6H7.75ZM5.8125 4.5H25.1875V1.5H5.8125V4.5Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span class="side-nav__label">Fármacos Oncólogicos</span>
+        </a>
+      </li>
+
+      <!-- Distribución -->
+      <li class="side-nav__item side-nav__item--distribution">
+        <a class="side-nav__link" href="#distribucion">
+          <svg
+            class="side-nav__icon"
+            viewBox="0 0 23 26"
+            fill="none"
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M11.5007 0C9.68909 2.60071 5.46196 7.40203 5.46196 10.903C5.46196 14.3039 8.07876 16.7046 11.5007 16.7046C14.9227 16.7046 17.5395 14.3039 17.5395 10.903C17.5395 7.40203 13.3123 2.60071 11.5007 0ZM7.67617 10.803C7.67617 13.1036 9.18586 14.604 11.0981 14.604V13.2036C9.78974 13.2036 9.08522 12.3034 9.08522 10.803H7.67617Z"
+              fill="currentColor"
+              fill-rule="evenodd"
+              clip-rule="evenodd"
+            />
+            <path
+              d="M10.6955 16.0044H12.3059V19.0052H19.3511C20.0221 19.0052 20.3576 19.3386 20.3576 20.0055V22.4061H18.7472V20.6056H4.25421V22.4061H2.64388V20.0055C2.64388 19.3386 2.97936 19.0052 3.65034 19.0052H10.6955V16.0044ZM10.6955 20.0055H12.3059V22.4061H10.6955V20.0055ZM5.46196 24.0066C5.46196 25.1069 4.55615 26.0071 3.44904 26.0071C2.34194 26.0071 1.43613 25.1069 1.43613 24.0066C1.43613 22.9063 2.34194 22.006 3.44904 22.006C4.55615 22.006 5.46196 22.9063 5.46196 24.0066ZM13.5136 24.0066C13.5136 25.1069 12.6078 26.0071 11.5007 26.0071C10.3936 26.0071 9.4878 25.1069 9.4878 24.0066C9.4878 22.9063 10.3936 22.006 11.5007 22.006C12.6078 22.006 13.5136 22.9063 13.5136 24.0066ZM21.5653 24.0066C21.5653 25.1069 20.6595 26.0071 19.5524 26.0071C18.4453 26.0071 17.5395 25.1069 17.5395 24.0066C17.5395 22.9063 18.4453 22.006 19.5524 22.006C20.6595 22.006 21.5653 22.9063 21.5653 24.0066Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span class="side-nav__label">Distribución y Trazabilidad</span>
+        </a>
+      </li>
+
+      <!-- Donantes -->
+      <li class="side-nav__item side-nav__item--donors">
+        <a class="side-nav__link" href="#donantes">
+          <svg
+            class="side-nav__icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M4 21H13.62C14.1971 21.0003 14.7674 20.8756 15.2916 20.6345C15.8159 20.3933 16.2817 20.0414 16.657 19.603L21.759 13.651C21.8658 13.5266 21.9404 13.3778 21.9762 13.2178C22.012 13.0578 22.0079 12.8914 21.9642 12.7333C21.9206 12.5752 21.8387 12.4303 21.7258 12.3113C21.6129 12.1924 21.4726 12.103 21.317 12.051L19.349 11.395C18.8734 11.2404 18.3669 11.2054 17.8745 11.2932C17.3821 11.3809 16.919 11.5887 16.526 11.898L13.341 14.445L12.724 13.21C12.3935 12.5443 11.8831 11.9845 11.2507 11.5939C10.6184 11.2033 9.88926 10.9976 9.146 11H4C2.897 11 2 11.897 2 13V19C2 20.103 2.897 21 4 21ZM4 13H9.146C9.909 13 10.594 13.423 10.935 14.105L11.382 15H7V17H13.014C13.1679 16.998 13.3191 16.9604 13.456 16.89L13.459 16.889L13.463 16.887H13.466L13.468 16.886H13.472L13.473 16.885C13.484 16.888 13.476 16.884 13.476 16.884C13.488 16.884 13.478 16.883 13.478 16.883H13.479L13.481 16.882L13.484 16.881L13.486 16.88L13.488 16.879L13.491 16.878L13.493 16.877L13.495 16.876L13.498 16.874L13.5 16.873L13.502 16.872L13.505 16.871L13.507 16.87H13.508L13.51 16.869L13.513 16.868L13.515 16.867C13.526 16.866 13.518 16.866 13.518 16.866L13.52 16.865C13.5585 16.8418 13.5953 16.8157 13.63 16.787L17.776 13.47C18.037 13.262 18.399 13.197 18.716 13.303L19.273 13.489L15.14 18.312C14.9499 18.5279 14.716 18.7009 14.454 18.8195C14.1919 18.9381 13.9077 18.9997 13.62 19H4V13ZM14.5 1.51404C13.5 2.81404 10.7 5.51404 10.7 6.91404C10.7 9.01404 12.4 10.414 14.5 10.414C16.6 10.414 18.3 9.01404 18.3 6.91404C18.3 5.51404 15.5 2.81404 14.5 1.51404Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span class="side-nav__label">Donantes Voluntarios</span>
+        </a>
+      </li>
+
+      <!-- Geolocalización -->
+      <li class="side-nav__item side-nav__item--location">
+        <a class="side-nav__link" href="#geolocalizacion">
+          <svg
+            class="side-nav__icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M5.7 15C4.03377 15.6353 3 16.5205 3 17.4997C3 19.4329 7.02944 21 12 21C16.9706 21 21 19.4329 21 17.4997C21 16.5205 19.9662 15.6353 18.3 15M12 9H12.01M18 9C18 13.0637 13.5 15 12 18C10.5 15 6 13.0637 6 9C6 5.68629 8.68629 3 12 3C15.3137 3 18 5.68629 18 9ZM13 9C13 9.55228 12.5523 10 12 10C11.4477 10 11 9.55228 11 9C11 8.44772 11.4477 8 12 8C12.5523 8 13 8.44772 13 9Z"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span class="side-nav__label">Geolocalización</span>
+        </a>
+      </li>
+
+      <!-- Inventario -->
+      <li class="side-nav__item side-nav__item--inventory">
+        <a class="side-nav__link" href="#inventario">
+          <svg
+            class="side-nav__icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M8 4H6.5C5.96957 4 5.46086 4.21071 5.08579 4.58579C4.71071 4.96086 4.5 5.46957 4.5 6V18C4.5 18.5304 4.71071 19.0391 5.08579 19.4142C5.46086 19.7893 5.96957 20 6.5 20H10M13 4H14.5C15.0304 4 15.5391 4.21071 15.9142 4.58579C16.2893 4.96086 16.5 5.46957 16.5 6V10"
+            />
+            <path d="M8 2.5H13V5.5H8V2.5Z" />
+            <path
+              d="M10.5 8.5C9.5 10 7.5 11.6 7.5 13C7.5 13.7956 7.81607 14.5587 8.37868 15.1213C8.94129 15.6839 9.70435 16 10.5 16C11.2956 16 12.0587 15.6839 12.6213 15.1213C13.1839 14.5587 13.5 13.7956 13.5 13C13.5 11.6 11.5 10 10.5 8.5Z"
+            />
+            <path
+              d="M21.5 17C21.5 19.4853 19.4853 21.5 17 21.5C14.5147 21.5 12.5 19.4853 12.5 17C12.5 14.5147 14.5147 12.5 17 12.5C19.4853 12.5 21.5 14.5147 21.5 17Z"
+            />
+            <path d="M14.8 17.0001L16.3 18.5001L19.2 15.6001" />
+          </svg>
+          <span class="side-nav__label">Inventario y Disponibilidad</span>
+        </a>
+      </li>
+
+    </ul>
+  </nav>
+</body>
+</html>

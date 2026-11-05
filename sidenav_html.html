@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Menú Navegación Lateral - Blood Control RD</title>
+  <link rel="stylesheet" href="src/assets/ui/navegacion/sidenav.css">
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f0f0f0; }
+    .sidenav-container { display: flex; min-height: 100vh; }
+    .side-nav { box-sizing: border-box; width: 240px; min-height: 100vh; background: #981A1A; border-right: 1px solid rgba(0,0,0,0.12); padding: 20px; }
+    .nav-item { position: absolute; height: 59px; left: 12px; right: 12px; top: 27px; background: #FF383C; border-radius: 8px; display: flex; flex-direction: column; align-items: flex-start; padding: 18px 20px; gap: 8px; }
+    .nav-item-row { display: flex; flex-direction: row; align-items: center; padding: 0; gap: 12px; width: 176px; height: 23px; }
+    .nav-item-icon { position: absolute; left: 12.5%; right: 12.5%; top: 8.33%; bottom: 8.33%; border: 4px solid #FFFFFF; }
+    .nav-item-label { width: 137px; height: 16px; font-family: 'Roboto'; font-style: normal; font-weight: 600; font-size: 14px; line-height: 16px; color: #000000; }
+    .main-content { flex: 1; padding: 20px; max-height: 100vh; overflow-y: auto; }
+  </style>
+</head>
+<body>
+<div class="sidenav-container">
+  <div class="side-nav">
+    <div class="nav-item nav-item-1"><div class="nav-item-row"><div class="nav-item-icon"></div><div class="nav-item-label">Home</div></div></div>
+    <div class="nav-item nav-item-2"><div class="nav-item-row"><div class="nav-item-icon"></div><div class="nav-item-label">Pacientes</div></div></div>
+    <div class="nav-item nav-item-3"><div class="nav-item-row"><div class="nav-item-icon"></div><div class="nav-item-label">Inventario</div></div></div>
+    <div class="nav-item nav-item-4"><div class="nav-item-row"><div class="nav-item-icon"></div><div class="nav-item-label">Reportes</div></div></div>
+    <div class="nav-item nav-item-5"><div class="nav-item-row"><div class="nav-item-icon"></div><div class="nav-item-label">Configuración</div></div></div>
+    <div class="nav-item nav-item-6"><div class="nav-item-row"><div class="nav-item-icon"></div><div class="nav-item-label">Ayuda</div></div></div>
+  </div>
+  <main class="main-content">
+    <h1>Panel de Control Blood Control RD</h1>
+    <p>Bienvenido al sistema de gestión de sangre. Utiliza el menú lateral para navegar entre las diferentes secciones.</p>
+    <p>Este es el contenido principal de la aplicación. El menú lateral permanece fijo a la izquierda con navegación rápida a todas las funcionalidades del sistema de control de sangre.</p>
+  </main>
+</div>
+</body>
+</html>
