@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
   blood_type ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-') NOT NULL,
   quantity SMALLINT UNSIGNED NOT NULL,
   reason VARCHAR(255) NULL,
+  patient_authorized_at DATETIME NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY ix_movement_owner_date (owner_id, created_at),
   CONSTRAINT fk_movement_owner FOREIGN KEY (owner_id) REFERENCES users(id),
@@ -111,6 +112,7 @@ CREATE TABLE IF NOT EXISTS patients (
 ) ENGINE=InnoDB;
 
 ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS patient_id BIGINT UNSIGNED NULL AFTER deposit_id;
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS patient_authorized_at DATETIME NULL AFTER reason;
 SET @bcrd_movement_patient_fk_exists = (
   SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
   WHERE CONSTRAINT_SCHEMA = DATABASE()
@@ -138,6 +140,7 @@ CREATE TABLE IF NOT EXISTS blood_requests (
   priority ENUM('low','medium','high','critical') NOT NULL DEFAULT 'medium',
   status ENUM('pending','fulfilled','cancelled') NOT NULL DEFAULT 'pending',
   reason VARCHAR(500) NULL,
+  patient_authorized_at DATETIME NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY ix_request_owner_status (owner_id, status, created_at),
   CONSTRAINT fk_request_owner FOREIGN KEY (owner_id) REFERENCES users(id),
@@ -145,6 +148,7 @@ CREATE TABLE IF NOT EXISTS blood_requests (
 ) ENGINE=InnoDB;
 ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS province VARCHAR(80) NULL;
 ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS patient_id BIGINT UNSIGNED NULL AFTER owner_id;
+ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS patient_authorized_at DATETIME NULL AFTER reason;
 
 SET @bcrd_patient_fk_exists = (
   SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS

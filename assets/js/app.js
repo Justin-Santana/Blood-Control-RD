@@ -67,7 +67,7 @@
         if(patient)Object.assign(patient,patientData);else{patient=patientData;d.patients.push(patient);}
         patientId=String(patient.id);
       }
-      return {id:x.id,patientId,hospital:x.hospital,province:x.province||'',type:x.type,quantity:+x.quantity,priority:x.priority,status:({pending:'Pendiente',fulfilled:'Atendida',cancelled:'Cancelada'})[x.status]||x.status,date:x.date};
+      return {id:x.id,patientId,hospital:x.hospital,province:x.province||'',type:x.type,quantity:+x.quantity,priority:x.priority,status:({pending:'Pendiente',fulfilled:'Atendida',cancelled:'Cancelada'})[x.status]||x.status,date:x.date,authorizedAt:x.patient_authorized_at||null};
     });
   };
   const mapMovements = (rows,d) => {
@@ -81,7 +81,7 @@
         if(patient)Object.assign(patient,patientData);else{patient=patientData;d.patients.push(patient);}
         patientId=String(patient.id);
       }
-      return {kind:({entry:'Entrada',exit:'Salida',expiry:'Vencimiento',adjustment:'Ajuste'})[x.kind]||x.kind,type:x.type,quantity:+x.quantity,bank:x.bank||'',detail:x.detail||'',patientId,date:x.date};
+      return {kind:({entry:'Entrada',exit:'Salida',expiry:'Vencimiento',adjustment:'Ajuste'})[x.kind]||x.kind,type:x.type,quantity:+x.quantity,bank:x.bank||'',detail:x.detail||'',patientId,authorizedAt:x.patient_authorized_at||null,date:x.date};
     });
   };
   const api = async (action, body) => {
@@ -253,7 +253,7 @@
         if(left){toast('Ese banco no tiene unidades suficientes para esta salida.');return;}
         for(const [lot,n] of plan)lot.available-=n;
         recipient=upsertPatient(d,{name,document,phone,dial});
-        d.movements.unshift({kind:'Salida',type,quantity:qty,bank,detail:f.elements.motivo.value.trim(),patientId:recipient.id,date:new Date().toISOString()});
+        const now=new Date().toISOString();d.movements.unshift({kind:'Salida',type,quantity:qty,bank,detail:f.elements.motivo.value.trim(),patientId:recipient.id,authorizedAt:now,date:now});
       }
       persist();f.reset();f.elements.banco.innerHTML=bankOptions('');setEntry(f.elements.tipo.value==='Entrada');renderMovements();statCards();renderDeposits();toast('Movimiento registrado.');
     });
@@ -273,7 +273,7 @@
       const quantity=Number(f.elements.cantidad.value);if(!Number.isInteger(quantity)||quantity<1||quantity>65535){toast('La cantidad debe estar entre 1 y 65,535 unidades.');return;}
       if(!f.elements.provincia.value||!f.elements.hospital.value){toast('Elige una provincia y un hospital o banco.');return;}
       const patient=upsertPatient(d,{name,document,phone,dial});
-      d.requests.unshift({patientId:patient.id,hospital:f.elements.hospital.value,province:f.elements.provincia.value,type:f.elements.tipo.value,quantity,priority:f.elements.prioridad.value,status:'Pendiente',date:new Date().toISOString()});
+      const now=new Date().toISOString();d.requests.unshift({patientId:patient.id,hospital:f.elements.hospital.value,province:f.elements.provincia.value,type:f.elements.tipo.value,quantity,priority:f.elements.prioridad.value,status:'Pendiente',authorizedAt:now,date:now});
       persist();f.reset();f.elements.hospital.innerHTML=bankOptions('');renderRequests();statCards();toast('Solicitud registrada.');
     });
     renderRequests();

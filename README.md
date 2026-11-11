@@ -22,7 +22,7 @@ The backend requires PHP 8.1 or newer with PDO MySQL and `mbstring`, plus MariaD
 4. Serve the repository through Apache/PHP so requests to `api/index.php` execute as PHP. A static server such as VS Code Live Server cannot run the API and will leave the app in demonstration mode.
 5. Use HTTPS when handling real personal information.
 
-The schema stores one patient/person record per account and Cédula, and links requests and inventory exits to that record to reduce repeated personal data. Donor records are reused when creating inventory deposits. The interface and API validate the Cédula checksum, phone length, required fields, consent checkbox, and blood-type consistency.
+The schema stores one patient/person record per account and Cédula, and links requests and inventory exits to that record to reduce repeated personal data. It records when authorization was confirmed for each request and exit. Donor records are reused when creating inventory deposits. The interface and API validate the Cédula checksum, phone length, required fields, consent checkbox, and blood-type consistency.
 
 ## Current payment behavior
 
