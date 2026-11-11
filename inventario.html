@@ -17,7 +17,7 @@
       <h2>Registrar movimiento</h2>
       <form id="form-mov" class="form">
         <label class="field">Tipo de Movimiento
-          <select name="tipo" required onchange="document.getElementById('campos-entrada').style.display = this.value === 'Entrada' ? 'block' : 'none'; document.getElementById('campos-salida').style.display = this.value === 'Salida' ? 'block' : 'none';">
+          <select name="tipo" required>
             <option value="Entrada">Depósito (Entrada)</option>
             <option value="Salida">Extracción (Salida)</option>
           </select>
@@ -27,13 +27,13 @@
         <label class="field">Provincia <select name="provincia" id="inv-province" required></select></label>
         <label class="field">Banco de sangre <select name="banco" id="inv-bank" data-fill="bancos" required></select></label>
 
-        <div id="campos-entrada" style="display:block; grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; padding: 15px; background: var(--red-hover); border-radius: var(--radius); border: 1px solid var(--red-tint);">
-          <h3 style="grid-column: 1 / -1; color: var(--red-dark); margin-bottom: 0;">Datos del Donante</h3>
-          <label class="field">Nombre del Donante <input name="donante" placeholder="ej: Juan Perez"></label>
-
-          <label class="field">Cédula del Donante <input name="cedula" id="inv-cedula" class="cedula-input" inputmode="numeric" placeholder="ej: 001-0000000-0" maxlength="13"></label>
-
-          <label class="field" style="grid-column: 1 / -1;">Componente Sanguíneo
+        <div id="campos-entrada" class="movement-entry full" hidden>
+          <h3>Datos del Donante</h3>
+          <label class="field full">Donante registrado
+            <select name="donante" id="inv-donor" required><option value="">Registra o selecciona un donante</option></select>
+          </label>
+          <p class="sub full" id="inventory-donor-help">Selecciona un donante de la sección Donantes. Sus datos personales se reutilizan desde ese registro.</p>
+          <label class="field full">Componente Sanguíneo
             <select name="componente">
               <option value="sangre_entera">Sangre Entera (42 días)</option>
               <option value="globulos_rojos">Glóbulos Rojos (42 días)</option>
@@ -42,8 +42,25 @@
             </select>
           </label>
         </div>
-        <div id="campos-salida" style="display:none; grid-column: 1 / -1; margin-top: 10px; padding: 15px; background: var(--paper); border-radius: var(--radius); border: 1px solid var(--line);">
-          <label class="field">Motivo de la Salida <input name="motivo" placeholder="ej: Transfusión, Vencimiento..."></label>
+        <div id="campos-salida" class="movement-exit full" hidden>
+          <label class="field full">Motivo de la Salida <input name="motivo" required maxlength="255" placeholder="ej: Transfusión, atención de emergencia..."></label>
+          <fieldset class="request-person">
+            <legend>Persona que recibirá la sangre</legend>
+            <div class="form-grid">
+              <label class="field full">Nombre completo<input name="patient_name" autocomplete="name" maxlength="160" placeholder="Nombre y apellido"></label>
+              <label class="field full">Cédula<input name="patient_document" class="cedula-input" inputmode="numeric" maxlength="13" autocomplete="off" placeholder="000-0000000-0"></label>
+              <label class="field full">Teléfono de contacto
+                <span class="phone-input-group">
+                  <select name="patient_dial" class="country-select" aria-label="Prefijo telefónico">
+                    <option value="+1" selected>🇩🇴 +1</option><option value="+34">🇪🇸 +34</option><option value="+52">🇲🇽 +52</option><option value="+57">🇨🇴 +57</option>
+                  </select>
+                  <input name="patient_phone" type="tel" autocomplete="tel" maxlength="24" placeholder="809-000-0000">
+                </span>
+              </label>
+            </div>
+            <p class="sub">Esta información se guarda una sola vez por persona y se vincula al movimiento de salida.</p>
+            <label class="privacy-consent"><input name="patient_authorized" type="checkbox"> Confirmo que tengo autorización para registrar estos datos personales.</label>
+          </fieldset>
         </div>
         <button class="btn" type="submit" style="grid-column: 1 / -1; margin-top: 10px;">Registrar Movimiento</button>
       </form>

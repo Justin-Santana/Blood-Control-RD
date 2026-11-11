@@ -1,4 +1,4 @@
--- Blood Control RD · MariaDB 10.6+
+-- Blood Control RD · MariaDB 10.4+
 -- Import with: mariadb -u root -p < database/schema.sql
 CREATE DATABASE IF NOT EXISTS blood_control_rd
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   owner_id BIGINT UNSIGNED NOT NULL,
   deposit_id BIGINT UNSIGNED NULL,
+  patient_id BIGINT UNSIGNED NULL,
   movement ENUM('entry','exit','expiry','adjustment') NOT NULL,
   blood_type ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-') NOT NULL,
   quantity SMALLINT UNSIGNED NOT NULL,
@@ -96,9 +97,40 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
   CONSTRAINT fk_movement_deposit FOREIGN KEY (deposit_id) REFERENCES blood_deposits(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS patients (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  owner_id BIGINT UNSIGNED NOT NULL,
+  full_name VARCHAR(160) NOT NULL,
+  identity_document CHAR(11) NOT NULL,
+  phone_country_code VARCHAR(8) NOT NULL DEFAULT '+1',
+  phone VARCHAR(24) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_patient_owner_document (owner_id, identity_document),
+  CONSTRAINT fk_patient_owner FOREIGN KEY (owner_id) REFERENCES users(id)
+) ENGINE=InnoDB;
+
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS patient_id BIGINT UNSIGNED NULL AFTER deposit_id;
+SET @bcrd_movement_patient_fk_exists = (
+  SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+  WHERE CONSTRAINT_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'inventory_movements'
+    AND CONSTRAINT_NAME = 'fk_movement_patient'
+    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @bcrd_movement_patient_fk_sql = IF(
+  @bcrd_movement_patient_fk_exists = 0,
+  'ALTER TABLE inventory_movements ADD CONSTRAINT fk_movement_patient FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT',
+  'SELECT 1'
+);
+PREPARE bcrd_movement_patient_fk_stmt FROM @bcrd_movement_patient_fk_sql;
+EXECUTE bcrd_movement_patient_fk_stmt;
+DEALLOCATE PREPARE bcrd_movement_patient_fk_stmt;
+
 CREATE TABLE IF NOT EXISTS blood_requests (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   owner_id BIGINT UNSIGNED NOT NULL,
+  patient_id BIGINT UNSIGNED NULL,
   hospital VARCHAR(160) NOT NULL,
   province VARCHAR(80) NULL,
   blood_type ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-') NOT NULL,
@@ -108,9 +140,27 @@ CREATE TABLE IF NOT EXISTS blood_requests (
   reason VARCHAR(500) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY ix_request_owner_status (owner_id, status, created_at),
-  CONSTRAINT fk_request_owner FOREIGN KEY (owner_id) REFERENCES users(id)
+  CONSTRAINT fk_request_owner FOREIGN KEY (owner_id) REFERENCES users(id),
+  CONSTRAINT fk_request_patient FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS province VARCHAR(80) NULL;
+ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS patient_id BIGINT UNSIGNED NULL AFTER owner_id;
+
+SET @bcrd_patient_fk_exists = (
+  SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+  WHERE CONSTRAINT_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'blood_requests'
+    AND CONSTRAINT_NAME = 'fk_request_patient'
+    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @bcrd_patient_fk_sql = IF(
+  @bcrd_patient_fk_exists = 0,
+  'ALTER TABLE blood_requests ADD CONSTRAINT fk_request_patient FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE RESTRICT',
+  'SELECT 1'
+);
+PREPARE bcrd_patient_fk_stmt FROM @bcrd_patient_fk_sql;
+EXECUTE bcrd_patient_fk_stmt;
+DEALLOCATE PREPARE bcrd_patient_fk_stmt;
 
 CREATE TABLE IF NOT EXISTS sales (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -121,6 +171,7 @@ CREATE TABLE IF NOT EXISTS sales (
   status ENUM('pending','paid','cancelled') NOT NULL DEFAULT 'pending',
   payment_method VARCHAR(32) NULL,
   buyer_name VARCHAR(160) NULL,
+  buyer_document CHAR(11) NULL,
   buyer_email VARCHAR(254) NULL,
   buyer_phone VARCHAR(32) NULL,
   province VARCHAR(80) NULL,
@@ -131,6 +182,7 @@ CREATE TABLE IF NOT EXISTS sales (
   CONSTRAINT fk_sale_bank FOREIGN KEY (bank_id) REFERENCES blood_banks(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS buyer_name VARCHAR(160) NULL;
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS buyer_document CHAR(11) NULL;
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS buyer_email VARCHAR(254) NULL;
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS buyer_phone VARCHAR(32) NULL;
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS province VARCHAR(80) NULL;

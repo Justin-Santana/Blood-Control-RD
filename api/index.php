@@ -57,6 +57,7 @@ function validCedula(string $doc): bool {
     $sum=0; for($i=0;$i<10;$i++){$v=(int)$doc[$i]*($i%2===0?1:2);if($v>9)$v-=9;$sum+=$v;}
     return ((10-($sum%10))%10)===(int)$doc[10];
 }
+function validDial(string $dial): bool { return in_array($dial, ['+1','+34','+52','+57'], true); }
 function sameOrigin(): void {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') return;
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
@@ -121,14 +122,15 @@ if ($action === 'profile') {
 }
 if ($action === 'banks') { $province=trim((string)($_GET['province']??''));if($province===''){$q=$db->query('SELECT id,name,province,unit_price FROM blood_banks ORDER BY province,name');reply(['banks'=>$q->fetchAll()]);}$q=$db->prepare('SELECT id,name,province,unit_price FROM blood_banks WHERE province=? ORDER BY name');$q->execute([$province]);reply(['banks'=>$q->fetchAll()]); }
 if ($action === 'donors') {
-    if ($_SERVER['REQUEST_METHOD']==='GET') { $q=$db->prepare("SELECT d.id,d.full_name AS name,d.identity_document AS document,CONCAT(d.phone_country_code,' ',d.phone) AS phone,d.blood_type AS type,d.province,b.name AS bank,d.created_at FROM donors d LEFT JOIN blood_banks b ON b.id=d.bank_id WHERE d.owner_id=? ORDER BY d.created_at DESC");$q->execute([$uid]);reply(['donors'=>$q->fetchAll()]); }
+    if ($_SERVER['REQUEST_METHOD']==='GET') { $q=$db->prepare("SELECT d.id,d.full_name AS name,d.identity_document AS document,d.phone_country_code AS dial,d.phone,d.blood_type AS type,d.province,b.name AS bank,d.created_at FROM donors d LEFT JOIN blood_banks b ON b.id=d.bank_id WHERE d.owner_id=? ORDER BY d.created_at DESC");$q->execute([$uid]);reply(['donors'=>$q->fetchAll()]); }
     method('POST');$name=bodyString($b,'name',160);$doc=preg_replace('/\D/','',(string)($b['document']??''));$type=(string)($b['type']??'');
     if(!validCedula($doc))fail('La cédula debe tener 11 dígitos y un dígito de verificación válido.');if(!in_array($type,$types,true))fail('Tipo de sangre inválido.');
     if (!preg_match("/^[\\p{L}]+(?:[ '\\-][\\p{L}]+)*$/u",$name)) fail('Escribe un nombre válido, sin números.');
     if(strlen(preg_replace('/\D/','',(string)($b['phone']??'')))<7||strlen(preg_replace('/\D/','',(string)($b['phone']??'')))>15)fail('Teléfono inválido.');
     $q=$db->prepare('SELECT id FROM blood_banks WHERE name=? AND province=? LIMIT 1');$q->execute([bodyString($b,'bank',160),bodyString($b,'province',80)]);$bank=$q->fetchColumn() ?: null;if(!$bank)fail('Selecciona un banco válido para esa provincia.');
+    $dial=(string)($b['dial']??'+1');if(!validDial($dial))fail('Prefijo telefónico inválido.');
     $q=$db->prepare('INSERT INTO donors(owner_id,full_name,identity_document,phone_country_code,phone,blood_type,province,bank_id) VALUES(?,?,?,?,?,?,?,?)');
-    $q->execute([$uid,$name,$doc,(string)($b['dial']??'+1'),bodyString($b,'phone',24),$type,bodyString($b,'province',80),$bank]);reply(['ok'=>true,'id'=>(int)$db->lastInsertId()],201);
+    $q->execute([$uid,$name,$doc,$dial,bodyString($b,'phone',24),$type,bodyString($b,'province',80),$bank]);reply(['ok'=>true,'id'=>(int)$db->lastInsertId()],201);
 }
 if ($action === 'deposits') {
     if ($_SERVER['REQUEST_METHOD']==='GET') {
@@ -139,36 +141,66 @@ if ($action === 'deposits') {
     if(($b['operation']??'')==='delete'){$q=$db->prepare('UPDATE blood_deposits SET deleted_at=NOW() WHERE id=? AND owner_id=? AND deleted_at IS NULL');$q->execute([(int)($b['id']??0),$uid]);reply(['ok'=>true]);}
     if(($b['operation']??'')==='update'){
         $id=(int)($b['id']??0);$date=(string)($b['collected']??'');$time=strtotime($date);if(!$time||$time>time())fail('Fecha u hora no válida.');
-        $donor=bodyString($b,'donor',160);$doc=preg_replace('/\D/','',(string)($b['document']??''));if(!preg_match("/^[\\p{L}]+(?:[ '\\-][\\p{L}]+)*$/u",$donor))fail('Escribe un nombre de donante válido.');if(!validCedula($doc))fail('La cédula debe tener 11 dígitos y un dígito de verificación válido.');
         $q=$db->prepare('SELECT component FROM blood_deposits WHERE id=? AND owner_id=? AND deleted_at IS NULL');$q->execute([$id,$uid]);$comp=$q->fetchColumn();if(!$comp)fail('Registro no encontrado.',404);
-        $expire=date('Y-m-d H:i:s',$time+$components[$comp]*86400);$q=$db->prepare('UPDATE blood_deposits SET donor_name=?,donor_document=?,collected_at=?,expires_at=? WHERE id=? AND owner_id=?');$q->execute([$donor,$doc,date('Y-m-d H:i:s',$time),$expire,$id,$uid]);reply(['ok'=>true]);
+        $expire=date('Y-m-d H:i:s',$time+$components[$comp]*86400);$q=$db->prepare('UPDATE blood_deposits SET collected_at=?,expires_at=? WHERE id=? AND owner_id=?');$q->execute([date('Y-m-d H:i:s',$time),$expire,$id,$uid]);reply(['ok'=>true]);
     }
-    $donor=bodyString($b,'donor',160);$doc=preg_replace('/\D/','',(string)($b['document']??''));if(!preg_match("/^[\\p{L}]+(?:[ '\\-][\\p{L}]+)*$/u",$donor))fail('Escribe un nombre de donante válido.');if(!validCedula($doc))fail('La cédula debe tener 11 dígitos y un dígito de verificación válido.');
+    $donorId=filter_var($b['donor_id']??null,FILTER_VALIDATE_INT);if(!$donorId||$donorId<1)fail('Selecciona un donante registrado.');
+    $q=$db->prepare('SELECT id,full_name,identity_document,blood_type FROM donors WHERE id=? AND owner_id=?');$q->execute([$donorId,$uid]);$registeredDonor=$q->fetch();if(!$registeredDonor)fail('El donante no existe en esta cuenta.',404);
+    if($registeredDonor['blood_type']!==$type)fail('El tipo de sangre debe coincidir con el registro del donante.');
+    $donor=$registeredDonor['full_name'];$doc=$registeredDonor['identity_document'];
+    if(!validCedula($doc))fail('La cédula registrada del donante no es válida.');
     $component=(string)($b['component']??'whole_blood');if(!isset($components[$component]))fail('Componente inválido.');$collected=strtotime((string)($b['collected']??'now'));if(!$collected||$collected>time())fail('Fecha de extracción inválida.');
     $bankName=bodyString($b,'bank',160);$province=bodyString($b,'province',80);$bank=$db->prepare('SELECT id FROM blood_banks WHERE name=? AND province=? LIMIT 1');$bank->execute([$bankName,$province]);$bankId=$bank->fetchColumn() ?: null;if(!$bankId)fail('Selecciona un banco válido para esa provincia.');
     $expiry=date('Y-m-d H:i:s',$collected+$components[$component]*86400);$db->beginTransaction();
-    try{$q=$db->prepare('INSERT INTO blood_deposits(owner_id,donor_name,donor_document,blood_type,component,quantity,available,bank_id,collected_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)');$q->execute([$uid,$donor,$doc,$type,$component,$qty,$qty,$bankId,date('Y-m-d H:i:s',$collected),$expiry]);$dep=(int)$db->lastInsertId();$q=$db->prepare("INSERT INTO inventory_movements(owner_id,deposit_id,movement,blood_type,quantity,reason) VALUES(?,?,'entry',?,?,?)");$q->execute([$uid,$dep,$type,$qty,'Donación']);$db->commit();}catch(Throwable $e){$db->rollBack();throw $e;}reply(['ok'=>true,'id'=>$dep],201);
+    try{$q=$db->prepare('INSERT INTO blood_deposits(owner_id,donor_id,donor_name,donor_document,blood_type,component,quantity,available,bank_id,collected_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)');$q->execute([$uid,$donorId,$donor,$doc,$type,$component,$qty,$qty,$bankId,date('Y-m-d H:i:s',$collected),$expiry]);$dep=(int)$db->lastInsertId();$q=$db->prepare("INSERT INTO inventory_movements(owner_id,deposit_id,movement,blood_type,quantity,reason) VALUES(?,?,'entry',?,?,?)");$q->execute([$uid,$dep,$type,$qty,'Donación']);$db->commit();}catch(Throwable $e){$db->rollBack();throw $e;}reply(['ok'=>true,'id'=>$dep],201);
 }
 if ($action === 'exit') {
-    method('POST');$type=(string)($b['type']??'');if(!in_array($type,$types,true))fail('Tipo de sangre inválido.');$qty=filter_var($b['quantity']??null,FILTER_VALIDATE_INT);if(!$qty||$qty<1)fail('Cantidad inválida.');
+    method('POST');$type=(string)($b['type']??'');if(!in_array($type,$types,true))fail('Tipo de sangre inválido.');$qty=filter_var($b['quantity']??null,FILTER_VALIDATE_INT);if(!$qty||$qty<1||$qty>65535)fail('Cantidad inválida.');
     $bank=$db->prepare('SELECT id FROM blood_banks WHERE name=? AND province=? LIMIT 1');$bank->execute([bodyString($b,'bank',160),bodyString($b,'province',80)]);$bankId=$bank->fetchColumn();if(!$bankId)fail('Selecciona un banco válido para esa provincia.');
-    $db->beginTransaction();try{$q=$db->prepare('SELECT id,available FROM blood_deposits WHERE owner_id=? AND bank_id=? AND blood_type=? AND available>0 AND expires_at>NOW() AND deleted_at IS NULL ORDER BY expires_at FOR UPDATE');$q->execute([$uid,$bankId,$type]);$remaining=$qty;$lots=$q->fetchAll();foreach($lots as $lot){$take=min($remaining,(int)$lot['available']);$u=$db->prepare('UPDATE blood_deposits SET available=available-? WHERE id=? AND owner_id=?');$u->execute([$take,$lot['id'],$uid]);$m=$db->prepare("INSERT INTO inventory_movements(owner_id,deposit_id,movement,blood_type,quantity,reason) VALUES(?,?,'exit',?,?,?)");$m->execute([$uid,$lot['id'],$type,$take,substr(trim((string)($b['reason']??'')),0,255)]);$remaining-=$take;if($remaining===0)break;}if($remaining>0){$db->rollBack();fail('Ese banco no tiene unidades suficientes para esta salida.',409);}$db->commit();reply(['ok'=>true]);}catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+    $patientName=bodyString($b,'patient_name',160);if(!preg_match("/^[\\p{L}]+(?:[ '\\-][\\p{L}]+)*$/u",$patientName))fail('Escribe un nombre válido para la persona que recibirá la sangre.');
+    $patientDocument=preg_replace('/\\D/','',(string)($b['patient_document']??''));if(!validCedula($patientDocument))fail('La cédula debe tener 11 dígitos y un dígito de verificación válido.');
+    $patientDial=(string)($b['patient_dial']??'+1');if(!validDial($patientDial))fail('Prefijo telefónico inválido.');
+    $patientPhone=bodyString($b,'patient_phone',24);$phoneDigits=preg_replace('/\\D/','',$patientPhone);if(strlen($phoneDigits)<7||strlen($phoneDigits)>15)fail('Teléfono de contacto inválido.');
+    if(empty($b['patient_authorized']))fail('Confirma que tienes autorización para registrar los datos personales.');
+    $reason=bodyString($b,'reason',255);
+    $db->beginTransaction();try{
+        $q=$db->prepare('INSERT INTO patients(owner_id,full_name,identity_document,phone_country_code,phone) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id),full_name=VALUES(full_name),phone_country_code=VALUES(phone_country_code),phone=VALUES(phone)');
+        $q->execute([$uid,$patientName,$patientDocument,$patientDial,$patientPhone]);$patientId=(int)$db->lastInsertId();
+        if(!$patientId){$q=$db->prepare('SELECT id FROM patients WHERE owner_id=? AND identity_document=?');$q->execute([$uid,$patientDocument]);$patientId=(int)$q->fetchColumn();}
+        $q=$db->prepare('SELECT id,available FROM blood_deposits WHERE owner_id=? AND bank_id=? AND blood_type=? AND available>0 AND expires_at>NOW() AND deleted_at IS NULL ORDER BY expires_at FOR UPDATE');$q->execute([$uid,$bankId,$type]);$remaining=$qty;$lots=$q->fetchAll();
+        foreach($lots as $lot){$take=min($remaining,(int)$lot['available']);$u=$db->prepare('UPDATE blood_deposits SET available=available-? WHERE id=? AND owner_id=?');$u->execute([$take,$lot['id'],$uid]);$m=$db->prepare("INSERT INTO inventory_movements(owner_id,deposit_id,patient_id,movement,blood_type,quantity,reason) VALUES(?,?,?,'exit',?,?,?)");$m->execute([$uid,$lot['id'],$patientId,$type,$take,$reason]);$remaining-=$take;if($remaining===0)break;}
+        if($remaining>0){$db->rollBack();fail('Ese banco no tiene unidades suficientes para esta salida.',409);}
+        $db->commit();reply(['ok'=>true,'patient_id'=>$patientId]);
+    }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
 }
 if ($action === 'requests') {
-    if ($_SERVER['REQUEST_METHOD']==='GET'){$q=$db->prepare('SELECT id,hospital,province,blood_type AS type,quantity,priority,status,created_at AS date FROM blood_requests WHERE owner_id=? ORDER BY created_at DESC');$q->execute([$uid]);reply(['requests'=>$q->fetchAll()]);}
+    if ($_SERVER['REQUEST_METHOD']==='GET'){$q=$db->prepare('SELECT r.id,r.patient_id,r.hospital,r.province,r.blood_type AS type,r.quantity,r.priority,r.status,r.created_at AS date,p.full_name AS patient_name,p.identity_document AS patient_document,p.phone_country_code AS patient_dial,p.phone AS patient_phone FROM blood_requests r LEFT JOIN patients p ON p.id=r.patient_id AND p.owner_id=r.owner_id WHERE r.owner_id=? ORDER BY r.created_at DESC');$q->execute([$uid]);reply(['requests'=>$q->fetchAll()]);}
     method('POST');if(($b['operation']??'')==='cancel'){$q=$db->prepare("UPDATE blood_requests SET status='cancelled' WHERE id=? AND owner_id=? AND status='pending'");$q->execute([(int)($b['id']??0),$uid]);reply(['ok'=>true]);}
-    $type=(string)($b['type']??'');if(!in_array($type,$types,true))fail('Tipo de sangre inválido.');$qty=filter_var($b['quantity']??null,FILTER_VALIDATE_INT);if(!$qty||$qty<1)fail('Cantidad inválida.');$priority=(string)($b['priority']??'medium');if(!in_array($priority,['low','medium','high','critical'],true))$priority='medium';
-    $q=$db->prepare('INSERT INTO blood_requests(owner_id,hospital,province,blood_type,quantity,priority,reason) VALUES(?,?,?,?,?,?,?)');$q->execute([$uid,bodyString($b,'hospital',160),bodyString($b,'province',80),$type,$qty,$priority,substr(trim((string)($b['reason']??'')),0,500)]);reply(['ok'=>true,'id'=>(int)$db->lastInsertId()],201);
+    $type=(string)($b['type']??'');if(!in_array($type,$types,true))fail('Tipo de sangre inválido.');$qty=filter_var($b['quantity']??null,FILTER_VALIDATE_INT);if(!$qty||$qty<1||$qty>65535)fail('La cantidad debe estar entre 1 y 65,535 unidades.');$priority=(string)($b['priority']??'medium');if(!in_array($priority,['low','medium','high','critical'],true))$priority='medium';
+    $patientName=bodyString($b,'patient_name',160);if(!preg_match("/^[\\p{L}]+(?:[ '\\-][\\p{L}]+)*$/u",$patientName))fail('Escribe un nombre válido para la persona.');
+    $patientDocument=preg_replace('/\\D/','',(string)($b['patient_document']??''));if(!validCedula($patientDocument))fail('La cédula debe tener 11 dígitos y un dígito de verificación válido.');
+    $patientDial=(string)($b['patient_dial']??'+1');if(!validDial($patientDial))fail('Prefijo telefónico inválido.');
+    $patientPhone=bodyString($b,'patient_phone',24);$phoneDigits=preg_replace('/\\D/','',$patientPhone);if(strlen($phoneDigits)<7||strlen($phoneDigits)>15)fail('Teléfono de contacto inválido.');
+    if(empty($b['patient_authorized']))fail('Confirma que tienes autorización para registrar los datos personales.');
+    $hospital=bodyString($b,'hospital',160);$province=bodyString($b,'province',80);
+    $db->beginTransaction();try{
+        $q=$db->prepare('INSERT INTO patients(owner_id,full_name,identity_document,phone_country_code,phone) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id),full_name=VALUES(full_name),phone_country_code=VALUES(phone_country_code),phone=VALUES(phone)');
+        $q->execute([$uid,$patientName,$patientDocument,$patientDial,$patientPhone]);$patientId=(int)$db->lastInsertId();
+        if(!$patientId){$q=$db->prepare('SELECT id FROM patients WHERE owner_id=? AND identity_document=?');$q->execute([$uid,$patientDocument]);$patientId=(int)$q->fetchColumn();}
+        $q=$db->prepare('INSERT INTO blood_requests(owner_id,patient_id,hospital,province,blood_type,quantity,priority,reason) VALUES(?,?,?,?,?,?,?,?)');
+        $q->execute([$uid,$patientId,$hospital,$province,$type,$qty,$priority,substr(trim((string)($b['reason']??'')),0,500)]);$requestId=(int)$db->lastInsertId();$db->commit();
+    }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+    reply(['ok'=>true,'id'=>$requestId,'patient_id'=>$patientId],201);
 }
-if ($action === 'movements') { $q=$db->prepare("SELECT m.movement AS kind,m.blood_type AS type,m.quantity,m.reason AS detail,m.created_at AS date,b.name AS bank FROM inventory_movements m LEFT JOIN blood_deposits d ON d.id=m.deposit_id LEFT JOIN blood_banks b ON b.id=d.bank_id WHERE m.owner_id=? ORDER BY m.created_at DESC LIMIT 500");$q->execute([$uid]);reply(['movements'=>$q->fetchAll()]); }
+if ($action === 'movements') { $q=$db->prepare("SELECT m.movement AS kind,m.blood_type AS type,m.quantity,m.reason AS detail,m.created_at AS date,b.name AS bank,m.patient_id,p.full_name AS patient_name,p.identity_document AS patient_document,p.phone_country_code AS patient_dial,p.phone AS patient_phone FROM inventory_movements m LEFT JOIN blood_deposits d ON d.id=m.deposit_id LEFT JOIN blood_banks b ON b.id=d.bank_id LEFT JOIN patients p ON p.id=m.patient_id AND p.owner_id=m.owner_id WHERE m.owner_id=? ORDER BY m.created_at DESC LIMIT 500");$q->execute([$uid]);reply(['movements'=>$q->fetchAll()]); }
 if ($action === 'sales') {
     if ($_SERVER['REQUEST_METHOD']==='GET'){$q=$db->prepare('SELECT id,invoice_number,currency,subtotal,status,payment_method,created_at FROM sales WHERE owner_id=? ORDER BY created_at DESC');$q->execute([$uid]);reply(['sales'=>$q->fetchAll()]);}
     method('POST');$method=(string)($b['payment_method']??'');if(!in_array($method,['cashapp','paypal','debit','credit'],true))fail('Método de pago inválido.');$items=$b['items']??[];if(!is_array($items)||!count($items))fail('El carrito está vacío.');
-    $buyer=bodyString($b,'buyer_name',160);$email=strtolower(bodyString($b,'buyer_email',254));$phone=bodyString($b,'buyer_phone',32);$province=bodyString($b,'province',80);$bankName=bodyString($b,'bank',160);
+    $buyer=bodyString($b,'buyer_name',160);$buyerDocument=preg_replace('/\\D/','',(string)($b['buyer_document']??''));if(!validCedula($buyerDocument))fail('La cédula del comprador debe tener 11 dígitos y un dígito de verificación válido.');$email=strtolower(bodyString($b,'buyer_email',254));$phone=bodyString($b,'buyer_phone',32);$province=bodyString($b,'province',80);$bankName=bodyString($b,'bank',160);
     if(!preg_match("/^[\\p{L}]+(?:[ '\\-][\\p{L}]+)*$/u",$buyer))fail('Escribe un nombre de comprador válido.');if(!preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/',$email))fail('Correo de comprador inválido.');if(strlen(preg_replace('/\D/','',$phone))<7||strlen(preg_replace('/\D/','',$phone))>15)fail('Teléfono de comprador inválido.');
     $bank=$db->prepare('SELECT id,unit_price FROM blood_banks WHERE name=? AND province=? LIMIT 1');$bank->execute([$bankName,$province]);$bankInfo=$bank->fetch();if(!$bankInfo)fail('Selecciona un banco válido para esa provincia.');$bankId=(int)$bankInfo['id'];
     $db->beginTransaction();try{$subtotal=0;$normalized=[];foreach($items as $it){$type=(string)($it['type']??'');$units=filter_var($it['units']??null,FILTER_VALIDATE_INT);if(!in_array($type,$types,true)||!$units||$units<1||$units>500)fail('Artículo inválido.');$unit=(float)$bankInfo['unit_price']*(str_contains($type,'-')?1.06:1);$line=round($units*$unit,2);$subtotal+=$line;$normalized[]=[$type,$units,$unit,$line];}
-        $invoice='BCRD-'.date('Ymd').'-'.strtoupper(bin2hex(random_bytes(4)));$q=$db->prepare('INSERT INTO sales(owner_id,invoice_number,subtotal,status,payment_method,buyer_name,buyer_email,buyer_phone,province,bank_id) VALUES(?,?,?,\'pending\',?,?,?,?,?,?)');$q->execute([$uid,$invoice,$subtotal,$method,$buyer,$email,$phone,$province,$bankId]);$sale=(int)$db->lastInsertId();$q=$db->prepare('INSERT INTO sale_items(sale_id,blood_type,units,unit_price,line_total) VALUES(?,?,?,?,?)');foreach($normalized as $it)$q->execute([$sale,...$it]);$db->commit();reply(['ok'=>true,'id'=>$sale,'invoice_number'=>$invoice,'total'=>$subtotal,'status'=>'pending']);
+        $invoice='BCRD-'.date('Ymd').'-'.strtoupper(bin2hex(random_bytes(4)));$q=$db->prepare('INSERT INTO sales(owner_id,invoice_number,subtotal,status,payment_method,buyer_name,buyer_document,buyer_email,buyer_phone,province,bank_id) VALUES(?,?,?,\'pending\',?,?,?,?,?,?,?)');$q->execute([$uid,$invoice,$subtotal,$method,$buyer,$buyerDocument,$email,$phone,$province,$bankId]);$sale=(int)$db->lastInsertId();$q=$db->prepare('INSERT INTO sale_items(sale_id,blood_type,units,unit_price,line_total) VALUES(?,?,?,?,?)');foreach($normalized as $it)$q->execute([$sale,...$it]);$db->commit();reply(['ok'=>true,'id'=>$sale,'invoice_number'=>$invoice,'total'=>$subtotal,'status'=>'pending']);
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
 }
 fail('Acción desconocida.',404);

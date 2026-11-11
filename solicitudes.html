@@ -18,10 +18,27 @@
         <form id="form-solicitud" class="form">
           <label class="field">Provincia <select name="provincia" id="request-province" required></select></label>
           <label class="field">Hospital / Banco <select name="hospital" id="request-hospital" required></select></label>
+          <fieldset class="request-person">
+            <legend>Datos de la persona</legend>
+            <div class="form-grid">
+              <label class="field full">Nombre completo<input name="patient_name" autocomplete="name" maxlength="160" required placeholder="Nombre y apellido"></label>
+              <label class="field full">Cédula<input name="patient_document" class="cedula-input" inputmode="numeric" maxlength="13" autocomplete="off" required placeholder="000-0000000-0"></label>
+              <label class="field full">Teléfono de contacto
+                <span class="phone-input-group">
+                  <select name="patient_dial" class="country-select" aria-label="Prefijo telefónico">
+                    <option value="+1" selected>🇩🇴 +1</option><option value="+34">🇪🇸 +34</option><option value="+52">🇲🇽 +52</option><option value="+57">🇨🇴 +57</option>
+                  </select>
+                  <input name="patient_phone" type="tel" autocomplete="tel" maxlength="24" required placeholder="809-000-0000">
+                </span>
+              </label>
+            </div>
+            <p class="sub">La cédula y el teléfono identifican a la persona en esta solicitud. En modo demostración los datos quedan en este navegador; con el servidor se guardan en la base de datos.</p>
+            <label class="privacy-consent"><input name="patient_authorized" type="checkbox" required> Confirmo que tengo autorización para registrar estos datos personales.</label>
+          </fieldset>
           <label class="field">Tipo de Sangre Requerido
             <select name="tipo" data-fill="tipos" required><option value="" disabled selected>Selecciona</option></select>
           </label>
-          <label class="field">Cantidad (Unidades) <input name="cantidad" type="number" min="1" required placeholder="ej: 4"></label>
+          <label class="field">Cantidad (Unidades) <input name="cantidad" type="number" min="1" max="65535" required placeholder="ej: 4"></label>
           <label class="field">Prioridad
             <select name="prioridad">
               <option value="Media" selected>Media</option>
@@ -37,7 +54,7 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Hospital</th><th>Tipo</th><th>Cantidad</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr>
+              <tr><th>Hospital</th><th>Persona</th><th>Tipo</th><th>Cantidad</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr>
             </thead>
             <tbody id="tabla-solicitudes"></tbody>
           </table>
