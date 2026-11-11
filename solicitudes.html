@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es-DO">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solicitudes – Blood Control RD</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/app.js" defer></script>
+</head>
+<body data-page="solicitudes">
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <main id="contenido">
+    <h1>Gestión de Solicitudes</h1>
+    <p class="lead">Registra y administra los requerimientos de sangre de los hospitales.</p>
+    <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
+      <section class="panel" style="margin-top:0;">
+        <h2>Nueva Solicitud</h2>
+        <form id="form-solicitud" class="form">
+          <label class="field">Provincia <select name="provincia" id="request-province" required></select></label>
+          <label class="field">Hospital / Banco <select name="hospital" id="request-hospital" required></select></label>
+          <label class="field">Tipo de Sangre Requerido
+            <select name="tipo" data-fill="tipos" required><option value="" disabled selected>Selecciona</option></select>
+          </label>
+          <label class="field">Cantidad (Unidades) <input name="cantidad" type="number" min="1" required placeholder="ej: 4"></label>
+          <label class="field">Prioridad
+            <select name="prioridad">
+              <option value="Media" selected>Media</option>
+              <option value="Alta">Alta</option>
+              <option value="Crítica">Crítica</option>
+            </select>
+          </label>
+          <button class="btn" type="submit" style="grid-column:1/-1; margin-top:10px;">Crear Solicitud</button>
+        </form>
+      </section>
+      <section class="panel">
+        <h2>Solicitudes Pendientes / Historial</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Hospital</th><th>Tipo</th><th>Cantidad</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr>
+            </thead>
+            <tbody id="tabla-solicitudes"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

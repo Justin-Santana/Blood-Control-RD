@@ -1,3 +1,15 @@
 #kilocode y carpetas innecesarias
 
 .kilocode
+
+# Local editor preferences
+.vscode/
+
+# Generated PDF deliverables and render files
+/output/
+/tmp/
+
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example

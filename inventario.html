@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es-DO">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inventario – Blood Control RD</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/app.js" defer></script>
+</head>
+<body data-page="inventario">
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <main id="contenido">
+    <h1>Movimientos de Sangre</h1>
+    <p class="lead">Registra depósitos y salidas. Los datos se guardan en tu cuenta.</p>
+
+    <section class="panel">
+      <h2>Registrar movimiento</h2>
+      <form id="form-mov" class="form">
+        <label class="field">Tipo de Movimiento
+          <select name="tipo" required onchange="document.getElementById('campos-entrada').style.display = this.value === 'Entrada' ? 'block' : 'none'; document.getElementById('campos-salida').style.display = this.value === 'Salida' ? 'block' : 'none';">
+            <option value="Entrada">Depósito (Entrada)</option>
+            <option value="Salida">Extracción (Salida)</option>
+          </select>
+        </label>
+        <label class="field">Tipo de Sangre <select name="sangre" data-fill="tipos" required></select></label>
+        <label class="field">Unidades (450 ml c/u) <input name="unidades" type="number" min="1" required></label>
+        <label class="field">Provincia <select name="provincia" id="inv-province" required></select></label>
+        <label class="field">Banco de sangre <select name="banco" id="inv-bank" data-fill="bancos" required></select></label>
+
+        <div id="campos-entrada" style="display:block; grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; padding: 15px; background: var(--red-hover); border-radius: var(--radius); border: 1px solid var(--red-tint);">
+          <h3 style="grid-column: 1 / -1; color: var(--red-dark); margin-bottom: 0;">Datos del Donante</h3>
+          <label class="field">Nombre del Donante <input name="donante" placeholder="ej: Juan Perez"></label>
+
+          <label class="field">Cédula del Donante <input name="cedula" id="inv-cedula" class="cedula-input" inputmode="numeric" placeholder="ej: 001-0000000-0" maxlength="13"></label>
+
+          <label class="field" style="grid-column: 1 / -1;">Componente Sanguíneo
+            <select name="componente">
+              <option value="sangre_entera">Sangre Entera (42 días)</option>
+              <option value="globulos_rojos">Glóbulos Rojos (42 días)</option>
+              <option value="plaquetas">Plaquetas (5 días)</option>
+              <option value="plasma">Plasma (365 días)</option>
+            </select>
+          </label>
+        </div>
+        <div id="campos-salida" style="display:none; grid-column: 1 / -1; margin-top: 10px; padding: 15px; background: var(--paper); border-radius: var(--radius); border: 1px solid var(--line);">
+          <label class="field">Motivo de la Salida <input name="motivo" placeholder="ej: Transfusión, Vencimiento..."></label>
+        </div>
+        <button class="btn" type="submit" style="grid-column: 1 / -1; margin-top: 10px;">Registrar Movimiento</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Historial de movimientos</h2>
+      <div class="table-wrap"><table><thead><tr><th>Movimiento</th><th>Tipo</th><th>Unidades</th><th>Banco</th><th>Detalle</th><th>Fecha</th></tr></thead><tbody id="tabla-mov"></tbody></table></div>
+    </section>
+    <section class="panel">
+      <h2>Depósitos individuales</h2>
+      <p class="sub">Cada lote mantiene su propio donante, hora de registro y vencimiento; las unidades de donantes distintos se conservan separadas.</p>
+      <div class="table-wrap"><table><thead><tr><th>Donante</th><th>Tipo</th><th>Cantidad</th><th>Banco</th><th>Vencimiento</th><th>Detalle</th></tr></thead><tbody id="tabla-deposits"></tbody></table></div>
+    </section>
+  </main>
+</body>
+</html>

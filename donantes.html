@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es-DO">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Donantes – Blood Control RD</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/app.js" defer></script>
+</head>
+<body data-page="donantes">
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <main id="contenido">
+    <h1>Donantes y Bancos de Sangre</h1>
+    <p class="lead">Registra nuevos donantes o busca un banco de sangre por su nombre o provincia.</p>
+
+    <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
+
+      <!-- SECCIÓN 1: DIRECTORIO DE BANCOS CON BUSCADOR -->
+      <section class="panel" style="margin-top:0;">
+        <h2>📍 Directorio de Bancos de Sangre</h2>
+        <p style="font-size:0.9rem; color:var(--muted); margin-bottom:12px;">Escribe la letra inicial (ej. "A") o el nombre de la provincia para filtrar.</p>
+
+        <label class="field" style="margin-bottom:16px;">
+          <input id="search-banco" type="search" placeholder="Buscar por banco o provincia (ej. A, Santiago, Cruz Roja)...">
+        </label>
+
+        <ul id="lista-bancos" style="list-style:none; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:var(--white);">
+          <!-- El JS llenará esto automáticamente -->
+        </ul>
+      </section>
+
+      <!-- SECCIÓN 2: REGISTRO DE DONANTES -->
+      <section class="panel">
+        <h2>🩸 Registrar Nuevo Donante</h2>
+        <form id="form-donante" class="form">
+          <label class="field">Nombre Completo <input name="nombre" required placeholder="ej: Juan Perez"></label>
+          <label class="field">Cédula <input name="cedula" id="donante-cedula" required placeholder="ej: 001-0000000-0" maxlength="13"></label>
+          <label class="field">Teléfono <span class="phone-input-group"><select name="telefono_dial" class="country-select" aria-label="Prefijo telefónico"><option value="+1" selected>🇩🇴 +1</option><option value="+34">🇪🇸 +34</option><option value="+52">🇲🇽 +52</option><option value="+57">🇨🇴 +57</option></select><input name="telefono" id="donante-telefono" type="tel" required placeholder="ej: 809-000-0000" maxlength="18"></span></label>
+          <label class="field">Tipo de Sangre
+            <select name="tipo" data-fill="tipos" required>
+              <option value="" disabled selected>Selecciona</option>
+            </select>
+          </label>
+          <label class="field">Provincia
+            <select name="provincia" id="donante-provincia" required>
+              <!-- Llenado por JS -->
+            </select>
+          </label>
+          <label class="field">Banco de Donación
+            <select name="banco" id="donante-banco" required>
+              <!-- Llenado por JS -->
+            </select>
+          </label>
+          <button class="btn" type="submit" style="grid-column:1/-1; margin-top:10px;">Registrar Donante</button>
+        </form>
+      </section>
+
+      <!-- SECCIÓN 3: TABLA DE DONANTES REGISTRADOS -->
+      <section class="panel">
+        <h2>Lista de Donantes Registrados</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Tipo</th>
+                <th>Provincia</th>
+                <th>Teléfono</th>
+                <th>Fecha Registro</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-donantes"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</body>
+</html>

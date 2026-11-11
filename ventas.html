@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es-DO">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ventas – Blood Control RD</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/app.js" defer></script>
+</head>
+<body data-page="ventas">
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <main id="contenido">
+    <h1>Venta de Sangre</h1>
+    <p class="lead">Elige el lugar de compra y la cantidad. El precio por unidad y el total se actualizan al instante.</p>
+
+    <section class="panel" style="max-width: 600px; margin: 0 auto;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <img src="assets/img/logo.svg" alt="Logo" width="40" height="40">
+        <h2 style="margin:0;">Calculadora de Compra</h2>
+      </div>
+
+      <div class="form sales-form" style="grid-template-columns: 1fr;">
+        <div class="form-grid">
+          <label class="field">Nombre completo<input id="buyer-name" autocomplete="name" placeholder="ej: Juan Pérez" required></label>
+          <label class="field">Correo electrónico<input id="buyer-email" type="email" autocomplete="email" placeholder="ej: juan@email.com" required></label>
+          <label class="field">Teléfono<input id="buyer-phone" type="tel" autocomplete="tel" placeholder="ej: 809-000-0000" required></label>
+          <label class="field">Provincia de compra<select id="sale-province" required></select></label>
+          <label class="field full">Banco de sangre<select id="sale-bank" required></select></label>
+        </div>
+        <div class="form-grid">
+          <label class="field">Tipo de Sangre
+            <select id="tipo_sangre">
+              <option value="A+">A+</option><option value="A-">A- (+6%)</option>
+              <option value="B+">B+</option><option value="B-">B- (+6%)</option>
+              <option value="AB+">AB+</option><option value="AB-">AB- (+6%)</option>
+              <option value="O+">O+</option><option value="O-">O- (+6%)</option>
+            </select>
+          </label>
+          <label class="field">Unidad de medida<select id="sale-unit"><option value="liters">Litros</option><option value="ml">Mililitros</option></select></label>
+          <label class="field">Cantidad <input id="cantidad_venta" type="number" min="0.01" step="0.01" placeholder="ej: 1.5"></label>
+        </div>
+        <div class="price-preview" aria-live="polite"><span>Precio por unidad (450 ml)</span><strong id="sale-unit-price">—</strong><span>Precio estimado</span><strong id="sale-estimate">—</strong></div>
+        <small class="sub">El precio es una estimación basada en la tarifa del banco; el total final se confirma antes del pago.</small>
+        <button type="button" id="btn-agregar-carrito" class="btn" style="background:var(--ink); margin-top:10px;">Agregar al Carrito</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
