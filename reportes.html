@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es-DO">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reportes – Blood Control RD</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/app.js" defer></script>
+</head>
+<body data-page="reportes">
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <main id="contenido">
+
+    <!-- CABECERA CON BOTÓN DE AGREGAR Y FILTRO -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+      <div>
+        <h1 style="margin-bottom: 4px;">Gestión de Depósitos</h1>
+        <p class="lead" style="margin-bottom: 0;">Historial detallado de todas las unidades depositadas y su tiempo de vida restante.</p>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+        <button class="btn" id="btn-agregar" style="background: var(--ink);" type="button">
+          + Agregar Depósito
+        </button>
+
+        <label class="field" style="margin: 0; min-width: 200px;">
+          Filtrar por tipo:
+          <select id="filtro-tipo" style="margin-top: 4px;">
+            <option value="">Todos los tipos</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <section class="panel" style="border: 2px solid var(--red); margin-top: 0;">
+      <h2 id="titulo-tabla">Registro de Donaciones</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Donante</th>
+              <th>Cédula</th>
+              <th>Tipo</th>
+              <th>Cantidad</th>
+              <th>Fecha Extracción</th>
+              <th>Vencimiento</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-depositos"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es-DO">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel – Blood Control RD</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/app.js" defer></script>
+</head>
+<body data-page="panel">
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <main id="contenido">
+    <h1>Inventario de mi cuenta</h1>
+    <p class="lead">Estado de tus reservas de sangre y su tiempo de vida útil.</p>
+    <dl class="stats" id="stats"></dl>
+    <section class="panel">
+      <h2>Stock por tipo de sangre</h2>
+      <p style="font-size:0.85rem; color:var(--muted); margin-bottom:12px;">Haz clic en un tipo de sangre para gestionar sus registros.</p>
+      <ul class="tiles" id="gauges"></ul>
+    </section>
+    <section class="panel" id="detalle">
+      <h2>Inventario detallado</h2>
+      <label class="field" style="max-width:320px;margin-bottom:14px">Selecciona un tipo de sangre
+        <select id="sel-tipo"></select>
+      </label>
+      <div class="table-wrap"><table><thead><tr><th>Donante</th><th>Cédula</th><th>Tipo</th><th>Unidades</th><th>Extracción</th><th>Vencimiento</th></tr></thead><tbody id="tabla-panel"></tbody></table></div>
+    </section>
+  </main>
+</body>
+</html>

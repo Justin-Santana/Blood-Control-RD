@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es-DO">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inventario – Blood Control RD</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/app.js" defer></script>
+</head>
+<body data-page="inventario">
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <main id="contenido">
+    <h1>Movimientos de Sangre</h1>
+    <p class="lead">Registra depósitos y salidas. Los datos se guardan en tu cuenta.</p>
+
+    <section class="panel">
+      <h2>Registrar movimiento</h2>
+      <form id="form-mov" class="form">
+        <label class="field">Tipo de Movimiento
+          <select name="tipo" required>
+            <option value="Entrada">Depósito (Entrada)</option>
+            <option value="Salida">Extracción (Salida)</option>
+          </select>
+        </label>
+        <label class="field">Tipo de Sangre <select name="sangre" data-fill="tipos" required></select></label>
+        <label class="field">Unidades (450 ml c/u) <input name="unidades" type="number" min="1" required></label>
+        <label class="field">Provincia <select name="provincia" id="inv-province" required></select></label>
+        <label class="field">Banco de sangre <select name="banco" id="inv-bank" data-fill="bancos" required></select></label>
+
+        <div id="campos-entrada" class="movement-entry full" hidden>
+          <h3>Datos del Donante</h3>
+          <label class="field full">Donante registrado
+            <select name="donante" id="inv-donor" required><option value="">Registra o selecciona un donante</option></select>
+          </label>
+          <p class="sub full" id="inventory-donor-help">Selecciona un donante de la sección Donantes. Sus datos personales se reutilizan desde ese registro.</p>
+          <label class="field full">Componente Sanguíneo
+            <select name="componente">
+              <option value="sangre_entera">Sangre Entera (42 días)</option>
+              <option value="globulos_rojos">Glóbulos Rojos (42 días)</option>
+              <option value="plaquetas">Plaquetas (5 días)</option>
+              <option value="plasma">Plasma (365 días)</option>
+            </select>
+          </label>
+        </div>
+        <div id="campos-salida" class="movement-exit full" hidden>
+          <label class="field full">Motivo de la Salida <input name="motivo" required maxlength="255" placeholder="ej: Transfusión, atención de emergencia..."></label>
+          <fieldset class="request-person">
+            <legend>Persona que recibirá la sangre</legend>
+            <div class="form-grid">
+              <label class="field full">Nombre completo<input name="patient_name" autocomplete="name" maxlength="160" placeholder="Nombre y apellido"></label>
+              <label class="field full">Cédula<input name="patient_document" class="cedula-input" inputmode="numeric" maxlength="13" autocomplete="off" placeholder="000-0000000-0"></label>
+              <label class="field full">Teléfono de contacto
+                <span class="phone-input-group">
+                  <select name="patient_dial" class="country-select" aria-label="Prefijo telefónico">
+                    <option value="+1" selected>🇩🇴 +1</option><option value="+34">🇪🇸 +34</option><option value="+52">🇲🇽 +52</option><option value="+57">🇨🇴 +57</option>
+                  </select>
+                  <input name="patient_phone" type="tel" autocomplete="tel" maxlength="24" placeholder="809-000-0000">
+                </span>
+              </label>
+            </div>
+            <p class="sub">Esta información se guarda una sola vez por persona y se vincula al movimiento de salida.</p>
+            <label class="privacy-consent"><input name="patient_authorized" type="checkbox"> Confirmo que tengo autorización para registrar estos datos personales.</label>
+          </fieldset>
+        </div>
+        <button class="btn" type="submit" style="grid-column: 1 / -1; margin-top: 10px;">Registrar Movimiento</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Historial de movimientos</h2>
+      <div class="table-wrap"><table><thead><tr><th>Movimiento</th><th>Tipo</th><th>Unidades</th><th>Banco</th><th>Detalle</th><th>Fecha</th></tr></thead><tbody id="tabla-mov"></tbody></table></div>
+    </section>
+    <section class="panel">
+      <h2>Depósitos individuales</h2>
+      <p class="sub">Cada lote mantiene su propio donante, hora de registro y vencimiento; las unidades de donantes distintos se conservan separadas.</p>
+      <div class="table-wrap"><table><thead><tr><th>Donante</th><th>Tipo</th><th>Cantidad</th><th>Banco</th><th>Vencimiento</th><th>Detalle</th></tr></thead><tbody id="tabla-deposits"></tbody></table></div>
+    </section>
+  </main>
+</body>
+</html>

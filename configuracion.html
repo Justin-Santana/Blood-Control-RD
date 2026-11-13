@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es-DO">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuración – Blood Control RD</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="assets/js/app.js" defer></script>
+</head>
+<body data-page="configuracion">
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <main id="contenido">
+    <h1>Configuración de la cuenta</h1>
+    <p class="lead">Personaliza tu perfil y cómo aparece tu nombre en Blood Control RD.</p>
+    <section class="panel settings-panel">
+      <form id="form-settings" class="form" novalidate>
+        <div class="profile-photo-card">
+          <img id="profile-preview" src="assets/img/logo.svg" alt="Vista previa de la foto de perfil">
+          <div><strong>Foto de perfil</strong><p class="sub">PNG, JPG o WebP. Máximo 1.2 MB.</p><label class="btn btn-ghost file-button">Cambiar foto<input id="profile-photo" type="file" accept="image/png,image/jpeg,image/webp" hidden></label><button id="remove-photo" class="btn btn-ghost" type="button">Quitar foto</button></div>
+        </div>
+        <label class="field">Nombre de usuario<input name="username" id="settings-username" autocomplete="username" maxlength="40" placeholder="ej: felix_rd" required><small class="sub">Entre 3 y 40 caracteres: letras sin espacios, números y guion bajo.</small></label>
+        <label class="field">Mostrar en la barra superior<select name="display_name_mode" id="display-name-mode"><option value="username">Mi nombre de usuario</option><option value="real">Mi nombre y apellido</option></select></label>
+        <label class="field">Apariencia<select name="theme" id="theme-choice"><option value="light">Claro</option><option value="dark">Oscuro</option></select></label>
+        <label class="field">Densidad de la interfaz<select name="compact_mode" id="compact-choice"><option value="false">Cómoda</option><option value="true">Compacta</option></select></label>
+        <button class="btn" type="submit">Guardar configuración</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,350 @@
+'use strict';
+/* Blood Control RD front end. Local demo storage; use the MariaDB schema with
+   a server API before exposing this system to real users or patient data. */
+(() => {
+  const KEY = 'bcrd:demo:v1', SESSION = 'bcrd:demo-session';
+  const TYPES = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
+  let BANKS = [
+    {name:'Banco de Sangre Hospital Plaza de la Salud',province:'Distrito Nacional',unit_price:8000},
+    {name:'Banco de Sangre Cruz Roja Dominicana',province:'Distrito Nacional',unit_price:8000},
+    {name:'Banco de Sangre Hospital Salvador B. Gautier',province:'Distrito Nacional',unit_price:8000},
+    {name:'Banco de Sangre Hospital José María Cabral y Báez',province:'Santiago',unit_price:8000},
+    {name:'Banco de Sangre Hospital Regional Universitario Jaime Mota',province:'Barahona',unit_price:8000}
+  ];
+  let serverMode = false;
+  const $ = (q, root=document) => root.querySelector(q), $$ = (q, root=document) => [...root.querySelectorAll(q)];
+  const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {users:[], data:{}}; } catch { return {users:[],data:{}}; } };
+  const write = d => localStorage.setItem(KEY, JSON.stringify(d));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const formatCedula = value => {const d=String(value??'').replace(/\D/g,'').slice(0,11);return d.length>10?`${d.slice(0,3)}-${d.slice(3,10)}-${d.slice(10)}`:d.length>3?`${d.slice(0,3)}-${d.slice(3)}`:d;};
+  const validCedula = value => {const d=String(value??'').replace(/\D/g,'');if(!/^\d{11}$/.test(d))return false;let sum=0;for(let i=0;i<10;i++){let n=Number(d[i])*(i%2===0?1:2);if(n>9)n-=9;sum+=n;}return (10-sum%10)%10===Number(d[10]);};
+  function maskCedula(input){if(!input||input.dataset.maskBound)return;input.dataset.maskBound='1';input.maxLength=13;input.inputMode='numeric';input.addEventListener('input',()=>{const value=formatCedula(input.value);input.value=value;input.setCustomValidity(!value||validCedula(value)?'':'La cédula debe ser válida y tener el formato 000-0000000-0.');});input.addEventListener('blur',()=>{if(input.value&&!validCedula(input.value))input.setCustomValidity('La cédula debe ser válida y tener el formato 000-0000000-0.');});}
+  const id = () => crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const currentId = () => localStorage.getItem(SESSION);
+  const db = read();
+  db.users = Array.isArray(db.users) ? db.users : [];
+  db.data = db.data && typeof db.data === 'object' && !Array.isArray(db.data) ? db.data : {};
+  const cachedRemoteIds = new Set([
+    ...db.users.filter(u=>u.remote||/^\d+$/.test(String(u.id))).map(u=>String(u.id)),
+    ...Object.keys(db.data).filter(key=>/^\d+$/.test(key))
+  ]);
+  if(cachedRemoteIds.size){db.users=db.users.filter(u=>!u.remote&&!cachedRemoteIds.has(String(u.id)));for(const remoteId of cachedRemoteIds)delete db.data[remoteId];write(db);}
+  const user = () => db.users.find(u => u.id === currentId()) || null;
+  const uniquePeople = records => {
+    const seen=new Set();
+    return records.filter(person=>{const document=String(person?.document||'').replace(/\D/g,'');if(!document)return true;if(seen.has(document))return false;seen.add(document);return true;});
+  };
+  const data = () => {const u=user();if(!u)return null;const d=db.data[u.id]||={donors:[],patients:[],deposits:[],movements:[],requests:[],cart:[],sales:[]};for(const key of ['donors','patients','deposits','movements','requests','cart','sales'])d[key]||=[];d.donors=uniquePeople(d.donors);d.patients=uniquePeople(d.patients);return d;};
+  const persist = () => {
+    if(!serverMode){write(db);return;}
+    const saved=read(),users=(Array.isArray(saved.users)?saved.users:[]).filter(x=>!x.remote),ids=new Set(users.map(x=>String(x.id)));
+    const localData=Object.fromEntries(Object.entries(saved.data||{}).filter(([key])=>ids.has(String(key))));
+    write({users,data:localData});
+  };
+  const donorKey = donor => String(donor?.id ?? donor?.document ?? '');
+  const findDonor = (d,key) => (d?.donors||[]).find(x=>donorKey(x)===String(key)||String(x.document)===String(key))||null;
+  const donorOptions = select => {
+    if(!select)return;
+    const donors=data()?.donors||[];
+    select.innerHTML=`<option value="">${donors.length?'Selecciona un donante':'No hay donantes registrados'}</option>`+donors.map(x=>`<option value="${esc(donorKey(x))}">${esc(x.name)} · ${esc(formatCedula(x.document))} · ${esc(x.phone||'')}</option>`).join('');
+    const help=$('#inventory-donor-help');if(help)help.textContent=donors.length?'Los datos personales se toman del registro del donante para evitar volver a capturarlos.':'Registra primero a la persona en la sección Donantes para crear un depósito.';
+  };
+  const upsertPatient = (d,person) => {
+    d.patients||=[];const document=String(person.document||'').replace(/\D/g,'');
+    let existing=d.patients.find(x=>String(x.document||'').replace(/\D/g,'')===document);
+    if(existing)Object.assign(existing,{name:person.name,document,phone:person.phone,dial:person.dial});
+    else{existing={id:id(),name:person.name,document,phone:person.phone,dial:person.dial};d.patients.push(existing);}
+    return existing;
+  };
+  const mapRequests = (rows,d) => {
+    d.patients||=[];
+    d.requests=(rows||[]).map(x=>{
+      let patientId=x.patient_id==null?'':String(x.patient_id);
+      if(x.patient_document){
+        const document=String(x.patient_document).replace(/\D/g,'');
+        let patient=d.patients.find(p=>p.document===document);
+        const patientData={id:patientId||`legacy:${document}`,name:x.patient_name||'',document,phone:x.patient_phone||'',dial:x.patient_dial||'+1'};
+        if(patient)Object.assign(patient,patientData);else{patient=patientData;d.patients.push(patient);}
+        patientId=String(patient.id);
+      }
+      return {id:x.id,patientId,hospital:x.hospital,province:x.province||'',type:x.type,quantity:+x.quantity,priority:x.priority,status:({pending:'Pendiente',fulfilled:'Atendida',cancelled:'Cancelada'})[x.status]||x.status,date:x.date,authorizedAt:x.patient_authorized_at||null};
+    });
+  };
+  const mapMovements = (rows,d) => {
+    d.patients||=[];
+    d.movements=(rows||[]).map(x=>{
+      let patientId=x.patient_id==null?'':String(x.patient_id);
+      if(x.patient_document){
+        const document=String(x.patient_document).replace(/\D/g,'');
+        let patient=d.patients.find(p=>String(p.document).replace(/\D/g,'')===document);
+        const patientData={id:patientId||`legacy:${document}`,name:x.patient_name||'',document,phone:x.patient_phone||'',dial:x.patient_dial||'+1'};
+        if(patient)Object.assign(patient,patientData);else{patient=patientData;d.patients.push(patient);}
+        patientId=String(patient.id);
+      }
+      return {kind:({entry:'Entrada',exit:'Salida',expiry:'Vencimiento',adjustment:'Ajuste'})[x.kind]||x.kind,type:x.type,quantity:+x.quantity,bank:x.bank||'',detail:x.detail||'',patientId,authorizedAt:x.patient_authorized_at||null,date:x.date};
+    });
+  };
+  const api = async (action, body) => {
+    const response = await fetch(`api/index.php?action=${encodeURIComponent(action)}`, {method: body ? 'POST' : 'GET', credentials:'same-origin', headers: body ? {'Content-Type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined});
+    const type=response.headers.get('content-type')||''; if(!type.includes('application/json'))throw new Error('La API PHP no respondió JSON.');
+    serverMode=true; const payload=await response.json(); if(!response.ok)throw new Error(payload.error||'Error del servidor.');return payload;
+  };
+  async function hydrate(){
+    try {
+      const r=await api('me'); serverMode=true;
+      if(!r.user){localStorage.removeItem(SESSION);return;}
+      try{BANKS=(await api('banks')).banks;}catch{}
+      const u={id:String(r.user.id),first:r.user.first_name,last:r.user.last_name,username:r.user.username||`usuario${r.user.id}`,display_name_mode:r.user.display_name_mode||'username',email:r.user.email,phone:r.user.phone||'',profile_photo:r.user.profile_photo||null,theme:r.user.theme||'light',compact_mode:!!r.user.compact_mode,remote:true};
+      const i=db.users.findIndex(x=>String(x.id)===u.id);if(i<0)db.users.push(u);else db.users[i]={...db.users[i],...u};
+      localStorage.setItem(SESSION,u.id);const d=data(), page=document.body.dataset.page;
+      const depositReply=await api('deposits');d.deposits=depositReply.deposits.map(x=>({id:x.id,donor:x.donor,document:x.document,type:x.type,component:x.component,quantity:+x.quantity,available:+x.available,collected:x.collected,expiry:x.expiry,bank:x.bank||'',province:x.province||'',unit_price:+x.unit_price||8000}));
+      if(['donantes','inventario','panel','index'].includes(page)){
+        d.donors=(await api('donors')).donors.map(x=>({id:String(x.id),name:x.name,document:x.document,type:x.type,province:x.province,bank:x.bank||'',phone:`${x.dial||'+1'} ${x.phone||''}`.trim(),created:x.created_at}));
+      }
+      if(['panel','index'].includes(page)){
+        mapRequests((await api('requests')).requests,d);
+      }
+      if(page==='inventario'){
+        const movs=await api('movements');
+        mapMovements(movs.movements,d);
+      }
+      if(page==='solicitudes')mapRequests((await api('requests')).requests,d);
+      persist();
+    } catch(e) {
+      // A missing PHP runtime keeps the browser demo usable; an API JSON error means server mode is present but misconfigured.
+      if(String(e.message).includes('API PHP'))serverMode=false;
+      else if(serverMode){localStorage.removeItem(SESSION);persist();}
+    }
+  }
+  const money = n => new Intl.NumberFormat('es-DO',{style:'currency',currency:'DOP'}).format(n);
+  const dateTime = value => new Date(value).toLocaleString('es-DO',{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  const toast = msg => { let el=$('.toast-container'); if(!el){el=document.createElement('div');el.className='toast-container';document.body.append(el)} const t=document.createElement('div');t.className='toast';t.textContent=msg;el.append(t);setTimeout(()=>t.remove(),3500); };
+  const typeOptions = first => `<option value="">${first || 'Selecciona un tipo'}</option>`+TYPES.map(t=>`<option>${t}</option>`).join('');
+  const provinceOptions = selected => `<option value="">Selecciona una provincia</option>`+[...new Set(BANKS.map(b=>b.province))].sort((a,b)=>a.localeCompare(b,'es')).map(p=>`<option value="${esc(p)}" ${p===selected?'selected':''}>${esc(p)}</option>`).join('');
+  const bankOptions = province => `<option value="">${province?'Selecciona un banco':'Primero elige la provincia'}</option>`+BANKS.filter(b=>!province||b.province===province).map(b=>`<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
+  function bindProvinceBank(provinceField,bankField){if(!provinceField||!bankField)return;provinceField.innerHTML=provinceOptions();bankField.innerHTML=bankOptions('');provinceField.addEventListener('change',()=>{bankField.innerHTML=bankOptions(provinceField.value);});}
+  const selectedBank = (province,name) => BANKS.find(b=>b.province===province&&b.name===name)||null;
+  const showAuth = mode => { const m=$('#authModal'); if(!m)return; const registering=mode==='register';m.classList.add('active');$('#auth-title',m).textContent=registering?'Crear cuenta':'Iniciar sesión';$('#auth-register-fields',m).hidden=!registering;$('#auth-login-email',m).hidden=registering;$('#auth-submit',m).textContent=registering?'Crear cuenta':'Iniciar sesión';$('#auth-switch',m).textContent=registering?'¿Ya tienes cuenta? Iniciar sesión':'¿No tienes cuenta? Crear una cuenta';$('#auth-mode',m).value=mode; };
+  const closeAuth = () => $('#authModal')?.classList.remove('active');
+  function applyPreferences(u){const theme=u?.theme||'light';document.documentElement.dataset.theme=theme;document.body.classList.toggle('compact-ui',!!u?.compact_mode);}
+  function countdown(date){let s=Math.max(0,Math.floor((new Date(date)-Date.now())/1000));const d=Math.floor(s/86400);s%=86400;const h=Math.floor(s/3600);s%=3600;const m=Math.floor(s/60);s%=60;return d>0?`${d} d ${h} h ${m} min ${s} s`:`${h} h ${m} min ${s} s`;}
+  function expiringLots(){return (data()?.deposits||[]).filter(x=>x.available>0&&new Date(x.expiry)>Date.now()&&new Date(x.expiry)-Date.now()<=7*864e5).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));}
+  function renderExpiryAlerts(){const list=$('#expiry-items'),button=$('#expiry-count');if(!button)return;const soon=expiringLots();button.textContent=String(soon.length);button.closest('button').classList.toggle('has-alerts',soon.length>0);if(list)list.innerHTML=soon.length?soon.map((x,i)=>`<button class="expiry-item" type="button" data-view-deposit="${(data()?.deposits||[]).indexOf(x)}"><span class="badge type">${esc(x.type)}</span><strong>${esc(x.donor)}</strong><span>${countdown(x.expiry)}</span></button>`).join(''):`<div class="empty-state"><strong>Sin vencimientos cercanos</strong>Te avisaremos aquí cuando un lote venza en los próximos 7 días.</div>`;}
+  function toggleExpiryAlerts(force){const panel=$('#expiry-panel'),btn=$('#expiry-toggle');if(!panel||!btn)return;const open=force??!panel.classList.contains('show');panel.classList.toggle('show',open);btn.setAttribute('aria-expanded',String(open));renderExpiryAlerts();}
+  function initSettings(){const f=$('#form-settings'),u=user();if(!f||!u)return;f.elements.username.value=u.username||u.email.split('@')[0];f.elements.display_name_mode.value=u.display_name_mode||'username';f.elements.theme.value=u.theme||'light';f.elements.compact_mode.value=String(!!u.compact_mode);let photo=u.profile_photo||null;const preview=$('#profile-preview');if(photo)preview.src=photo;
+    $('#profile-photo').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)){toast('Elige una imagen PNG, JPG o WebP.');e.target.value='';return}try{photo=await compressPhoto(file);preview.src=photo;}catch{toast('No se pudo abrir esa imagen.');}});
+    $('#remove-photo').addEventListener('click',()=>{photo=null;preview.src='assets/img/logo.svg';});
+    f.addEventListener('submit',async e=>{e.preventDefault();const username=f.elements.username.value.trim().toLowerCase();if(!/^[a-z0-9_]{3,40}$/.test(username)){toast('El usuario debe tener entre 3 y 40 caracteres: letras, números y guion bajo.');return}if(db.users.some(x=>String(x.id)!==String(u.id)&&x.username===username)){toast('Ese nombre de usuario ya está en uso.');return}const prefs={username,display_name_mode:f.elements.display_name_mode.value,theme:f.elements.theme.value,compact_mode:f.elements.compact_mode.value==='true',profile_photo:photo};try{if(serverMode)await api('profile',{...prefs,remove_photo:!photo});Object.assign(u,prefs);persist();toast('Configuración guardada.');location.reload();}catch(err){toast(err.message)}});
+  }
+  function compressPhoto(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=reject;reader.onload=()=>{const image=new Image();image.onerror=reject;image.onload=()=>{const scale=Math.min(1,512/Math.max(image.width,image.height)),canvas=document.createElement('canvas');canvas.width=Math.round(image.width*scale);canvas.height=Math.round(image.height*scale);canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL('image/webp',.82));};image.src=reader.result;};reader.readAsDataURL(file);});}
+  function shell(){
+    const active=document.body.dataset.page||'index', u=user();
+    applyPreferences(u);
+    const header=document.createElement('header');header.className='topbar';
+    const display=u?(u.display_name_mode==='real'?`${u.first} ${u.last}`:`@${u.username||u.email?.split('@')[0]}`):'';
+    header.innerHTML=`<div class="topbar-left"><button class="menu-toggle" id="menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="main-nav"><span></span><span></span><span></span></button><a class="brand" href="index.html"><img class="brand-mark" src="assets/img/logo.svg" alt=""><span>Blood Control <small>RD</small></span></a></div><div class="topbar-right">${u?`<button class="expiry-alert" id="expiry-toggle" type="button" aria-expanded="false"><span aria-hidden="true">◷</span><span>Vencimientos</span><b id="expiry-count">0</b></button><div class="account-menu-wrap"><button class="account-trigger" id="account-toggle" type="button" aria-expanded="false" aria-controls="account-menu"><img class="account-avatar" src="${u.profile_photo||'assets/img/avatar-default.svg'}" alt=""><span class="account-trigger-label" id="account-welcome">Bienvenido, ${esc(display)}</span><span class="account-chevron" aria-hidden="true">⌄</span></button><section class="account-dropdown" id="account-menu" aria-label="Menú de cuenta" aria-hidden="true"><div class="account-menu-summary"><img src="${u.profile_photo||'assets/img/avatar-default.svg'}" alt=""><div><strong>${esc(display)}</strong><span>${esc(u.email||'')}</span></div></div><a class="dropdown-item" href="panel.html"><span aria-hidden="true">▦</span>Mi panel</a><a class="dropdown-item" href="configuracion.html"><span aria-hidden="true">⚙</span>Configuración</a><button class="dropdown-item" id="display-mode-toggle" type="button"><span aria-hidden="true">⇄</span><span id="display-mode-label">Mostrar ${u.display_name_mode==='real'?'nombre de usuario':'nombre real'}</span></button><button class="dropdown-item danger" id="logout" type="button"><span aria-hidden="true">↪</span>Cerrar sesión</button></section></div>`:`<button class="btn" id="login-open" type="button">Iniciar sesión</button>`}</div>`;
+    if(u)header.insertAdjacentHTML('beforeend',`<section class="expiry-popover" id="expiry-panel" aria-label="Próximos vencimientos"><h2>Próximos vencimientos</h2><p class="sub">Lotes que vencen dentro de una semana</p><div id="expiry-items"></div></section>`);
+    document.body.prepend(header);
+    const nav=document.createElement('aside');nav.className='side'+(innerWidth>=1024?' open':'');nav.id='main-nav';nav.innerHTML=`<nav aria-label="Navegación principal"><ul>${[['index','Inicio','index.html'],['panel','Panel','panel.html'],['inventario','Inventario','inventario.html'],['donantes','Donantes','donantes.html'],['solicitudes','Solicitudes','solicitudes.html'],['reportes','Reportes','reportes.html'],['ventas','Ventas','ventas.html'],['configuracion','Configuración','configuracion.html']].map(([k,n,h])=>`<li><a ${active===k?'aria-current="page"':''} href="${h}">${n}</a></li>`).join('')}</ul></nav>`;document.body.prepend(nav);
+    const backdrop=document.createElement('button');backdrop.className='nav-backdrop';backdrop.type='button';backdrop.setAttribute('aria-label','Cerrar menú');document.body.prepend(backdrop);
+    if(!$('#authModal')){const modal=document.createElement('div');modal.id='authModal';modal.className='modal-overlay';modal.innerHTML=`<section class="modal-content auth-modal"><button class="close-modal" type="button" aria-label="Cerrar">×</button><img class="auth-logo" src="assets/img/logo.svg" alt=""><h2 id="auth-title">Iniciar sesión</h2><form id="auth-form" class="auth-form" novalidate><input id="auth-mode" type="hidden" value="login"><div id="auth-register-fields" class="auth-register-fields" hidden><label class="field">Nombre<input name="first" autocomplete="given-name" placeholder="ej: Juan" required></label><label class="field">Primer apellido<input name="last" autocomplete="family-name" placeholder="ej: Pérez" required></label><label class="field">Nombre de usuario<input name="username" autocomplete="username" placeholder="ej: juan_rd" maxlength="40" required></label><label class="field">Correo electrónico<input name="email" type="email" autocomplete="email" placeholder="ej: juan@email.com" required></label><label class="field">Teléfono<div class="phone-input-group"><select name="dial" class="country-select"><option value="+1">🇩🇴 / 🇺🇸 +1</option><option value="+34">🇪🇸 +34</option><option value="+52">🇲🇽 +52</option></select><input name="phone" type="tel" placeholder="ej: 809-000-0000" required></div></label><label class="field full">Documento de identidad<input name="document" class="cedula-input" inputmode="numeric" maxlength="13" autocomplete="off" placeholder="ej: 001-0000000-0" required></label></div><label class="field" id="auth-login-email">Correo electrónico<input name="emailLogin" type="email" autocomplete="username" placeholder="ej: juan@email.com" required></label><label class="field">Contraseña<input name="password" type="password" autocomplete="current-password" placeholder="Mínimo 8 caracteres" required></label><button class="btn" id="auth-submit" type="submit">Iniciar sesión</button><button class="auth-switch" id="auth-switch" type="button">¿No tienes cuenta? Crear una cuenta</button></form><p class="sub">Demo local: las cuentas se guardan en este navegador.</p></section>`;document.body.append(modal);maskCedula($('.cedula-input',modal));}
+    $('#login-open')?.addEventListener('click',()=>showAuth('login'));
+    const accountButton=$('#account-toggle'),accountMenu=$('#account-menu');
+    const toggleAccount=open=>{if(!accountButton||!accountMenu)return;accountMenu.classList.toggle('show',open);accountMenu.setAttribute('aria-hidden',String(!open));accountButton.setAttribute('aria-expanded',String(open));if(open)accountMenu.querySelector('a,button')?.focus();};
+    accountButton?.addEventListener('click',()=>{const open=accountButton.getAttribute('aria-expanded')!=='true';if(open)toggleExpiryAlerts(false);toggleAccount(open);});
+    document.addEventListener('click',e=>{if(accountMenu&&!e.target.closest('.account-menu-wrap'))toggleAccount(false);if(e.target.closest('.account-dropdown a'))toggleAccount(false);});
+    $('#display-mode-toggle')?.addEventListener('click',async()=>{if(!u)return;const mode=u.display_name_mode==='real'?'username':'real';try{if(serverMode)await api('profile',{username:u.username,display_name_mode:mode,theme:u.theme||'light',compact_mode:!!u.compact_mode});u.display_name_mode=mode;persist();const next=mode==='real'?`${u.first} ${u.last}`:`@${u.username||u.email?.split('@')[0]}`;$('#account-welcome').textContent=`Bienvenido, ${next}`;$('.account-menu-summary strong').textContent=next;$('#display-mode-label').textContent=`Mostrar ${mode==='real'?'nombre de usuario':'nombre real'}`;toast(mode==='real'?'Ahora se muestra tu nombre real.':'Ahora se muestra tu nombre de usuario.');toggleAccount(false);}catch(err){toast(err.message)}});
+    $('#logout')?.addEventListener('click',async()=>{if(serverMode){try{await api('logout',{})}catch{}}localStorage.removeItem(SESSION);location.href='index.html'});
+    $('.close-modal')?.addEventListener('click',closeAuth);$('#auth-switch')?.addEventListener('click',()=>showAuth($('#auth-mode').value==='login'?'register':'login'));
+    const toggleMenu=open=>{nav.classList.toggle('open',open);backdrop.classList.toggle('show',open&&innerWidth<1024);$('#menu-toggle').setAttribute('aria-expanded',String(open));$('#menu-toggle').setAttribute('aria-label',open?'Cerrar menú':'Abrir menú');};
+    $('#menu-toggle')?.addEventListener('click',()=>toggleMenu(!nav.classList.contains('open')));backdrop.addEventListener('click',()=>toggleMenu(false));nav.addEventListener('click',e=>{if(e.target.closest('a'))toggleMenu(false)});document.addEventListener('keydown',e=>{if(e.key==='Escape'){toggleMenu(false);closeAuth();if(accountButton?.getAttribute('aria-expanded')==='true'){toggleAccount(false);accountButton.focus();}}});window.addEventListener('resize',()=>toggleMenu(innerWidth>=1024));
+    $('#auth-form')?.addEventListener('submit',authSubmit);
+    const note=$('.modal-content .sub');if(note)note.textContent=serverMode?'Las cuentas y sus datos se guardan en MariaDB.':'Modo de demostración: los datos se guardan solo en este navegador.';
+    if(u){renderExpiryAlerts();$('#expiry-toggle')?.addEventListener('click',()=>{if(accountButton?.getAttribute('aria-expanded')==='true')toggleAccount(false);toggleExpiryAlerts();});setInterval(renderExpiryAlerts,60000);}
+    if(!u && active!=='index'){document.querySelector('main')?.classList.add('locked');showAuth('login');}
+    $('#contenido')?.classList.add('app-main');
+  }
+  async function hash(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+  async function authSubmit(e){
+    e.preventDefault();const f=e.currentTarget,mode=$('#auth-mode').value,email=(mode==='register'?f.elements.email.value:f.elements.emailLogin.value).trim().toLowerCase(),password=f.elements.password.value;
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Escribe un correo válido.');return}if(password.length<8){toast('La contraseña debe tener al menos 8 caracteres.');return}
+    if(mode==='register'){
+      const first=f.elements.first.value.trim(),last=f.elements.last.value.trim(),username=f.elements.username.value.trim().toLowerCase(),doc=f.elements.document.value.replace(/\D/g,''),phone=f.elements.phone.value.replace(/\D/g,'');
+      if(!/^[\p{L}]+(?:[ '\-][\p{L}]+)*$/u.test(first)||!/^[\p{L}]+(?:[ '\-][\p{L}]+)*$/u.test(last)){toast('Escribe un nombre y apellido válidos, sin números.');return}
+      if(!/^[a-z0-9_]{3,40}$/.test(username)){toast('El usuario debe tener entre 3 y 40 caracteres: letras, números y guion bajo.');return}
+      if(!validCedula(doc)){toast('La cédula debe tener 11 dígitos y un dígito de verificación válido.');return}if(phone.length<7||phone.length>15){toast('Escribe un teléfono válido.');return}
+      if(serverMode){try{const r=await api('register',{first_name:first,last_name:last,username,email,phone_country_code:f.elements.dial.value,phone:f.elements.phone.value,identity_document:doc,password});const u={id:String(r.user.id),first:r.user.first_name,last:r.user.last_name,username:r.user.username,email:r.user.email,phone:r.user.phone||'',display_name_mode:'username',theme:'light',compact_mode:false,profile_photo:null,remote:true};db.users.push(u);db.data[u.id]={donors:[],deposits:[],movements:[],requests:[],cart:[],sales:[]};localStorage.setItem(SESSION,u.id);persist();location.reload();}catch(err){toast(err.message)}return}
+      if(db.users.some(u=>u.email===email||u.document===doc||u.username===username)){toast('Ya existe una cuenta con ese correo, documento o usuario.');return}
+      const u={id:id(),first,last,username,email,display_name_mode:'username',theme:'light',compact_mode:false,profile_photo:null,document:doc,phone:`${f.elements.dial.value} ${f.elements.phone.value}`,hash:await hash(password)};db.users.push(u);db.data[u.id]={donors:[],deposits:[],movements:[],requests:[],cart:[],sales:[]};localStorage.setItem(SESSION,u.id);persist();location.reload();return;
+    }
+    if(serverMode){try{const r=await api('login',{email,password});const u={...r.user,id:String(r.user.id),first:r.user.first_name,last:r.user.last_name,remote:true};db.users=db.users.filter(x=>String(x.id)!==u.id);db.users.push(u);db.data[u.id] ||= {donors:[],deposits:[],movements:[],requests:[],cart:[],sales:[]};localStorage.setItem(SESSION,u.id);persist();location.reload();}catch(err){toast(err.message)}return}
+    const u=db.users.find(x=>x.email===email);if(!u||u.hash!==await hash(password)){toast('Contraseña o usuario incorrecto');return}localStorage.setItem(SESSION,u.id);location.reload();
+  }
+  function gate(){if(!user()){showAuth('login');return false}return true}
+  function statCards(){const d=data(), deposits=d?.deposits||[], current=deposits.filter(x=>new Date(x.expiry)>Date.now()),total=current.reduce((n,x)=>n+Number(x.available),0),soon=current.filter(x=>new Date(x.expiry)-Date.now()<=7*864e5).reduce((n,x)=>n+Number(x.available),0);const stats=$('#stats');if(stats)stats.innerHTML=`<div class="stat"><dt>Unidades disponibles</dt><dd>${total}</dd></div><div class="stat"><dt>Sangre Por Vencer</dt><dd>${soon}</dd></div><div class="stat"><dt>Donantes registrados</dt><dd>${d?.donors.length||0}</dd></div><div class="stat"><dt>Solicitudes pendientes</dt><dd>${d?.requests.filter(x=>x.status==='Pendiente').length||0}</dd></div>`;return {d,total};}
+  function lotProgress(lot){const start=new Date(lot.collected).getTime(),end=new Date(lot.expiry).getTime(),now=Date.now(),life=end-start;return Math.max(0,Math.min(100,life>0?((now-start)/life)*100:100));}
+  function expiryCell(lot){const expired=new Date(lot.expiry)<=Date.now(),pct=lotProgress(lot);return `<div class="lot-expiry"><time datetime="${esc(lot.expiry)}">${dateTime(lot.expiry)}</time><div class="life-track" role="progressbar" aria-label="Vida útil restante" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(100-pct)}"><span style="width:${100-pct}%"></span></div><small class="sub ${expired?'text-danger':''}">${expired?'Vencido':countdown(lot.expiry)+' restantes'}</small></div>`;}
+  function renderDeposits(){
+    const target=$('#tabla-depositos')||$('#tabla-deposits')||$('#tabla-panel');if(!target)return;
+    const d=data()?.deposits||[],filter=$('#filtro-tipo')?.value||$('#sel-tipo')?.value||'all',rows=d.map((x,i)=>({x,i})).filter(({x})=>!filter||filter==='all'||x.type===filter),isInventory=target.id==='tabla-deposits',isReport=target.id==='tabla-depositos',empty=isInventory?6:(isReport?7:6);
+    const markup=({x,i})=>{
+      if(isInventory)return `<tr><td data-label="Donante"><strong>${esc(x.donor)}</strong><span class="sub">${esc(formatCedula(x.document))}</span></td><td data-label="Tipo"><span class="badge type">${esc(x.type)}</span></td><td data-label="Cantidad">${Number(x.available)||0} / ${Number(x.quantity)||0}</td><td data-label="Banco">${esc(x.bank||'—')}<span class="sub">${esc(x.province||'')}</span></td><td data-label="Vencimiento">${expiryCell(x)}</td><td data-label="Detalle"><button class="btn btn-ghost" type="button" data-view-deposit="${i}">Ver lote</button></td></tr>`;
+      return `<tr><td data-label="Donante">${esc(x.donor)}</td><td data-label="Cédula">${esc(formatCedula(x.document))}</td><td data-label="Tipo"><span class="badge type">${esc(x.type)}</span></td><td data-label="Unidades">${Number(x.available)||0} / ${Number(x.quantity)||0}</td><td data-label="Extracción">${dateTime(x.collected)}</td><td data-label="Vencimiento">${expiryCell(x)}</td>${isReport?`<td data-label="Acciones"><div class="table-actions"><button class="btn btn-ghost" type="button" data-view-deposit="${i}">Detalle / editar</button><button class="btn btn-ghost" type="button" data-del-deposit="${i}">Eliminar</button></div></td>`:''}</tr>`;
+    };
+    target.innerHTML=rows.length?rows.map(markup).join(''):`<tr><td colspan="${empty}"><div class="empty-state"><strong>Sin registros</strong>Agrega un depósito para comenzar.</div></td></tr>`;
+  }
+  function initIndex(){const hero=$('.hero');if(hero){if(user())hero.innerHTML=`<h1>Bienvenido, ${esc(user().first)} ${esc(user().last)}</h1><p>Administra tu inventario y consulta la información de tu cuenta.</p><a class="btn" href="panel.html">Ir al panel</a>`;else hero.innerHTML=`<h1>Control de sangre para bancos y hospitales</h1><p>Registra donaciones, vigila vencimientos y atiende solicitudes desde un solo lugar.</p><button class="btn" id="home-register">Crear una cuenta</button> <button class="btn btn-ghost" id="home-login">Iniciar sesión</button>`;$('#home-register')?.addEventListener('click',()=>showAuth('register'));$('#home-login')?.addEventListener('click',()=>showAuth('login'));}startCarousel();statCards();}
+  function startCarousel(){const car=$('.carousel'),dots=$('.dots');if(!car||!dots)return;const count=car.children.length;let index=0,timer;dots.innerHTML=Array.from({length:count},(_,i)=>`<button type="button" aria-label="Mostrar elemento ${i+1}" class="dot ${i===0?'on':''}" data-slide="${i}"></button>`).join('');const move=n=>{index=(n+count)%count;car.style.transform=`translateX(-${index*100}%)`;$$('.dot',dots).forEach((x,i)=>{x.classList.toggle('on',i===index);x.setAttribute('aria-current',i===index?'true':'false')})};const play=()=>{clearInterval(timer);if(!matchMedia('(prefers-reduced-motion: reduce)').matches)timer=setInterval(()=>{if(!document.hidden)move(index+1)},6000)};$('.carousel-btn.prev')?.addEventListener('click',()=>{move(index-1);play()});$('.carousel-btn.next')?.addEventListener('click',()=>{move(index+1);play()});dots.addEventListener('click',e=>{const b=e.target.closest('[data-slide]');if(b){move(+b.dataset.slide);play()}});$('.carousel-wrapper')?.addEventListener('mouseenter',()=>clearInterval(timer));$('.carousel-wrapper')?.addEventListener('mouseleave',play);move(0);play();}
+  function initDonors(){
+    const f=$('#form-donante');if(!f)return;
+    maskCedula(f.elements.cedula);f.elements.tipo.innerHTML=typeOptions();bindProvinceBank(f.elements.provincia,f.elements.banco);
+    f.addEventListener('submit',e=>{
+      e.preventDefault();if(!gate())return;
+      const doc=f.elements.cedula.value.replace(/\D/g,''),name=f.elements.nombre.value.trim();
+      if(!validCedula(doc)){toast('La cédula debe tener 11 dígitos y un dígito de verificación válido.');return;}
+      if(!/^[\p{L}]+(?:[ '\-][\p{L}]+)*$/u.test(name)){toast('Escribe un nombre válido, sin números.');return;}
+      const phoneDigits=f.elements.telefono.value.replace(/\D/g,'');if(phoneDigits.length<7||phoneDigits.length>15){toast('Escribe un teléfono válido.');return;}
+      const d=data();if(d.donors.some(x=>String(x.document||'').replace(/\D/g,'')===doc)){toast('Ya existe un donante con esa cédula en esta cuenta.');return;}
+      d.donors.unshift({id:id(),name,document:doc,type:f.elements.tipo.value,province:f.elements.provincia.value,bank:f.elements.banco.value,phone:`${f.elements.telefono_dial.value} ${f.elements.telefono.value}`,created:new Date().toISOString()});
+      persist();f.reset();f.elements.banco.innerHTML=bankOptions('');renderDonors();toast('Donante registrado.');
+    });
+    renderDonors();renderBanks();
+  }
+  function renderDonors(){const t=$('#tabla-donantes');if(!t)return;const arr=data()?.donors||[];t.innerHTML=arr.length?arr.map(x=>`<tr><td data-label="Nombre">${esc(x.name)}<span class="sub">${esc(formatCedula(x.document))}</span></td><td data-label="Tipo">${esc(x.type)}</td><td data-label="Provincia">${esc(x.province)}</td><td data-label="Teléfono">${esc(x.phone)}</td><td data-label="Fecha">${new Date(x.created).toLocaleDateString('es-DO')}</td></tr>`).join(''):'<tr><td colspan="5">Aún no hay donantes registrados.</td></tr>';}
+  function renderBanks(){const list=$('#lista-bancos'),search=$('#search-banco');if(!list)return;const draw=()=>{const query=(search?.value||'').trim().toLocaleLowerCase('es'),matches=BANKS.filter(b=>`${b.name} ${b.province}`.toLocaleLowerCase('es').includes(query));list.innerHTML=matches.length?matches.map(b=>`<li class="bank-directory-item"><strong>${esc(b.name)}</strong><span>${esc(b.province)}</span><small>${money(+b.unit_price||8000)} por unidad de 450 ml</small></li>`).join(''):'<li class="empty-state">No se encontraron bancos.</li>';};if(search&&!search.dataset.bound){search.addEventListener('input',draw);search.dataset.bound='1';}draw();}
+  function initInventory(){
+    const f=$('#form-mov');if(!f)return;
+    maskCedula(f.elements.patient_document);f.elements.sangre.innerHTML=typeOptions();bindProvinceBank(f.elements.provincia,f.elements.banco);donorOptions(f.elements.donante);
+    const setEntry=entry=>{
+      $('#campos-entrada').hidden=!entry;$('#campos-salida').hidden=entry;f.elements.donante.required=entry;
+      for(const name of ['patient_name','patient_document','patient_phone','patient_authorized'])f.elements[name].required=!entry;
+      f.elements.motivo.required=!entry;
+    };
+    f.addEventListener('change',e=>{
+      if(e.target.name==='tipo')setEntry(e.target.value==='Entrada');
+      if(e.target.name==='donante'){
+        const donor=findDonor(data(),e.target.value);if(!donor)return;
+        f.elements.sangre.value=donor.type||'';
+        if(donor.province){f.elements.provincia.value=donor.province;f.elements.provincia.dispatchEvent(new Event('change',{bubbles:true}));}
+        if(donor.bank)f.elements.banco.value=donor.bank;
+      }
+    });
+    setEntry(f.elements.tipo.value==='Entrada');
+    f.addEventListener('submit',e=>{
+      e.preventDefault();if(!gate())return;
+      const d=data(),type=f.elements.sangre.value,qty=Number(f.elements.unidades.value),province=f.elements.provincia.value,bank=f.elements.banco.value,entry=f.elements.tipo.value==='Entrada';
+      if(!Number.isInteger(qty)||qty<1||qty>500){toast('Indica una cantidad entera entre 1 y 500.');return;}
+      if(!province||!bank){toast('Elige una provincia y un banco.');return;}
+      let recipient=null;
+      if(entry){
+        const donor=findDonor(d,f.elements.donante.value);if(!donor){toast('Selecciona un donante registrado antes de crear el depósito.');return;}
+        if(donor.type!==type){toast('El tipo de sangre debe coincidir con el registro del donante.');return;}
+        const comp=f.elements.componente.value||'whole_blood',days={whole_blood:42,red_cells:42,platelets:5,plasma:365}[comp]||42,now=new Date();
+        d.deposits.unshift({id:id(),donor_id:donor.id||donor.document,donor:donor.name,document:donor.document,type,quantity:qty,available:qty,component:comp,collected:now.toISOString(),expiry:new Date(+now+days*864e5).toISOString(),bank,province,unit_price:selectedBank(province,bank)?.unit_price||8000});
+        d.movements.unshift({kind:'Entrada',type,quantity:qty,bank,detail:`Donación individual de ${donor.name}`,date:now.toISOString()});
+      }else{
+        const name=f.elements.patient_name.value.trim(),document=f.elements.patient_document.value.replace(/\D/g,''),phone=f.elements.patient_phone.value.trim(),dial=f.elements.patient_dial.value;
+        if(!/^[\p{L}]+(?:[ '\-][\p{L}]+)*$/u.test(name)){toast('Escribe un nombre válido para la persona que recibirá la sangre.');return;}
+        if(!validCedula(document)){toast('La cédula debe tener 11 dígitos y un dígito de verificación válido.');return;}
+        const phoneDigits=phone.replace(/\D/g,'');if(phoneDigits.length<7||phoneDigits.length>15){toast('Escribe un teléfono de contacto válido.');return;}
+        if(!f.elements.patient_authorized.checked){toast('Confirma que tienes autorización para registrar estos datos personales.');return;}
+        if(!f.elements.motivo.value.trim()){toast('Indica el motivo de la salida.');return;}
+        let left=qty;const plan=[];for(const lot of d.deposits.filter(x=>x.type===type&&x.province===province&&x.bank===bank&&new Date(x.expiry)>Date.now()&&x.available>0).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry))){const n=Math.min(left,Number(lot.available));plan.push([lot,n]);left-=n;if(!left)break;}
+        if(left){toast('Ese banco no tiene unidades suficientes para esta salida.');return;}
+        for(const [lot,n] of plan)lot.available-=n;
+        recipient=upsertPatient(d,{name,document,phone,dial});
+        const now=new Date().toISOString();d.movements.unshift({kind:'Salida',type,quantity:qty,bank,detail:f.elements.motivo.value.trim(),patientId:recipient.id,authorizedAt:now,date:now});
+      }
+      persist();f.reset();f.elements.banco.innerHTML=bankOptions('');setEntry(f.elements.tipo.value==='Entrada');renderMovements();statCards();renderDeposits();toast('Movimiento registrado.');
+    });
+    renderMovements();renderDeposits();
+  }
+  function renderMovements(){const t=$('#tabla-mov');if(!t)return;const d=data(),arr=d?.movements||[];t.innerHTML=arr.length?arr.map(x=>{const person=(d?.patients||[]).find(p=>String(p.id)===String(x.patientId));const info=person?`<span class="sub">Persona: ${esc(person.name)} · ${esc(formatCedula(person.document))} · ${esc(`${person.dial||'+1'} ${person.phone||''}`.trim())}</span>`:'';return `<tr><td>${esc(x.kind)}</td><td>${esc(x.type)}</td><td>${Number(x.quantity)||0}</td><td>${esc(x.bank||'—')}</td><td>${esc(x.detail)}${info}</td><td>${dateTime(x.date)}</td></tr>`}).join(''):'<tr><td colspan="6">Aún no hay movimientos.</td></tr>';}
+  function initRequests(){
+    const f=$('#form-solicitud');if(!f)return;
+    maskCedula(f.elements.patient_document);f.elements.tipo.innerHTML=typeOptions();bindProvinceBank(f.elements.provincia,f.elements.hospital);
+    f.addEventListener('submit',e=>{
+      e.preventDefault();if(!gate())return;
+      const d=data(),name=f.elements.patient_name.value.trim(),document=f.elements.patient_document.value.replace(/\D/g,''),phone=f.elements.patient_phone.value.trim(),dial=f.elements.patient_dial.value;
+      if(!/^[\p{L}]+(?:[ '\-][\p{L}]+)*$/u.test(name)){toast('Escribe un nombre válido para la persona.');return;}
+      if(!validCedula(document)){toast('La cédula debe tener 11 dígitos y un dígito de verificación válido.');return;}
+      const phoneDigits=phone.replace(/\D/g,'');if(phoneDigits.length<7||phoneDigits.length>15){toast('Escribe un teléfono de contacto válido.');return;}
+      if(!f.elements.patient_authorized.checked){toast('Confirma que tienes autorización para registrar estos datos personales.');return;}
+      const quantity=Number(f.elements.cantidad.value);if(!Number.isInteger(quantity)||quantity<1||quantity>65535){toast('La cantidad debe estar entre 1 y 65,535 unidades.');return;}
+      if(!f.elements.provincia.value||!f.elements.hospital.value){toast('Elige una provincia y un hospital o banco.');return;}
+      const patient=upsertPatient(d,{name,document,phone,dial});
+      const now=new Date().toISOString();d.requests.unshift({patientId:patient.id,hospital:f.elements.hospital.value,province:f.elements.provincia.value,type:f.elements.tipo.value,quantity,priority:f.elements.prioridad.value,status:'Pendiente',authorizedAt:now,date:now});
+      persist();f.reset();f.elements.hospital.innerHTML=bankOptions('');renderRequests();statCards();toast('Solicitud registrada.');
+    });
+    renderRequests();
+  }
+  function renderRequests(){
+    const t=$('#tabla-solicitudes');if(!t)return;
+    const d=data(),arr=d?.requests||[];
+    t.innerHTML=arr.length?arr.map((x,i)=>{
+      const patient=(d?.patients||[]).find(p=>String(p.id)===String(x.patientId));
+      const person=patient?`<strong>${esc(patient.name)}</strong><span class="sub">${esc(formatCedula(patient.document))}</span><span class="sub">${esc(`${patient.dial||'+1'} ${patient.phone||''}`.trim())}</span>`:'<span class="sub">Datos personales no disponibles en este registro anterior.</span>';
+      return `<tr><td data-label="Hospital">${esc(x.hospital)}<span class="sub">${esc(x.province||'')}</span></td><td data-label="Persona">${person}</td><td data-label="Tipo">${esc(x.type)}</td><td data-label="Cantidad">${Number(x.quantity)||0}</td><td data-label="Estado">${esc(x.status)}</td><td data-label="Fecha">${new Date(x.date).toLocaleString('es-DO')}</td><td data-label="Acciones">${x.status==='Pendiente'?`<button class="btn btn-ghost" type="button" data-cancel-request="${i}">Cancelar</button>`:'—'}</td></tr>`;
+    }).join(''):'<tr><td colspan="7">No hay solicitudes todavía.</td></tr>';
+  }
+  function openDepositEditor(index){
+    const d=data(),dep=d?.deposits[index];if(!dep)return;const modal=document.createElement('div');modal.className='modal-overlay active';
+    const inputDate=new Date(dep.collected),localStamp=new Date(inputDate-inputDate.getTimezoneOffset()*60000).toISOString().slice(0,19),localDate=localStamp.slice(0,10),localTime=localStamp.slice(11,19);
+    modal.innerHTML=`<section class="modal-content deposit-detail-modal"><button class="close-modal" type="button" aria-label="Cerrar">×</button><div class="detail-heading"><div><span class="feature-mark">DETALLE DEL LOTE</span><h2>${esc(dep.type)} · ${esc(dep.bank||'Banco')}</h2></div><img src="assets/img/logo.svg" alt="Blood Control RD"></div><div class="detail-meta"><span>Donante: <strong>${esc(dep.donor)}</strong> · ${esc(formatCedula(dep.document))}</span><span>Provincia: <strong>${esc(dep.province||'—')}</strong></span><span>Unidades disponibles: <strong>${Number(dep.available)||0} / ${Number(dep.quantity)||0}</strong></span></div><div class="detail-life"><div class="life-track" role="progressbar" aria-label="Vida útil restante" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(100-lotProgress(dep))}"><span style="width:${100-lotProgress(dep)}%"></span></div><p id="detail-time" class="sub"></p></div><form id="edit-deposit-form" class="form"><label class="field">Fecha de extracción<input name="collected_date" type="date" value="${esc(localDate)}" required></label><label class="field">Hora registrada<input name="collected_time" type="time" step="1" value="${esc(localTime)}" required></label><p class="sub full">Los datos de identidad se administran en Donantes. La hora se registra con segundos y el vencimiento se recalcula según el componente.</p><div class="modal-actions full"><button class="btn btn-ghost" type="button" data-close>Cancelar</button><button class="btn" type="submit">Guardar cambios</button></div></form></section>`;
+    document.body.append(modal);const close=()=>modal.remove();$('.close-modal',modal).onclick=close;$('[data-close]',modal).onclick=close;
+    const collectedValue=()=>`${$('input[name="collected_date"]',modal).value}T${$('input[name="collected_time"]',modal).value}`,timeLabel=$('#detail-time',modal),renderTime=()=>{const collected=new Date(collectedValue()),lifeDays=({whole_blood:42,red_cells:42,platelets:5,plasma:365,sangre_entera:42,globulos_rojos:42,plaquetas:5})[dep.component]||42,expiry=new Date(+collected+lifeDays*864e5),elapsed=Math.max(0,Date.now()-collected.getTime()),hours=Math.floor(elapsed/36e5),days=Math.floor(hours/24),percent=Math.max(0,Math.min(100,((Date.now()-collected)/(expiry-collected))*100));$('.detail-life .life-track span',modal).style.width=`${100-percent}%`;timeLabel.textContent=`Hora registrada: ${dateTime(collected)} · Transcurrido: ${days} d ${hours%24} h · Vencimiento estimado: ${dateTime(expiry)} · ${expiry>Date.now()?`Tiempo restante: ${countdown(expiry)}`:'Lote vencido'}`;};renderTime();$('input[name="collected_date"]',modal).addEventListener('input',renderTime);$('input[name="collected_time"]',modal).addEventListener('input',renderTime);
+    $('#edit-deposit-form',modal).onsubmit=async e=>{e.preventDefault();const dt=new Date(collectedValue());if(Number.isNaN(+dt)||dt>new Date()){toast('Revisa la fecha y hora de extracción.');return}try{if(serverMode)await api('deposits',{operation:'update',id:dep.id,type:dep.type,quantity:Math.max(1,+dep.quantity),collected:dt.toISOString()});else{dep.collected=dt.toISOString();const life=({whole_blood:42,red_cells:42,platelets:5,plasma:365,sangre_entera:42,globulos_rojos:42,plaquetas:5})[dep.component]||42;dep.expiry=new Date(+dt+life*864e5).toISOString();persist()}close();await reloadRemote();toast('Lote actualizado.')}catch(err){toast(err.message)}};
+  }
+  function initReports(){const sel=$('#filtro-tipo');if(sel)sel.innerHTML='<option value="all">Todos los tipos</option>'+TYPES.map(t=>`<option>${t}</option>`).join('');sel?.addEventListener('change',renderDeposits);$('#btn-agregar')?.addEventListener('click',()=>location.href='inventario.html');renderDeposits();}
+  function initPanel(){const {d}=statCards();const gauges=$('#gauges');if(gauges){gauges.innerHTML=TYPES.map(t=>{const n=(d?.deposits||[]).filter(x=>x.type===t&&new Date(x.expiry)>Date.now()).reduce((a,x)=>a+(Number(x.available)||0),0);return `<li class="tile ${n?'':'empty'}" tabindex="0" role="button" data-filter-type="${t}" aria-label="Filtrar inventario por sangre ${t}"><div class="tile-top"><div class="bag"><span style="--lvl:${Math.min(100,n*8)}%"></span></div><div><span class="tile-type">${t}</span><span class="tile-units">${n} unidades</span></div></div></li>`}).join('');gauges.addEventListener('click',e=>{const tile=e.target.closest('[data-filter-type]');if(tile){$('#sel-tipo').value=tile.dataset.filterType;renderDeposits();$('#detalle')?.scrollIntoView({behavior:'smooth',block:'start'});}});gauges.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const tile=e.target.closest('[data-filter-type]');if(tile){e.preventDefault();$('#sel-tipo').value=tile.dataset.filterType;renderDeposits();$('#detalle')?.scrollIntoView({behavior:'smooth',block:'start'});}}});}const s=$('#sel-tipo');if(s){s.innerHTML='<option value="">Selecciona un tipo de sangre</option><option value="all" selected>Todos los tipos</option>'+TYPES.map(t=>`<option value="${t}">${t}</option>`).join('');s.addEventListener('change',renderDeposits);}if($('#tabla-panel'))renderDeposits();}
+  function initSales(){
+    const d=data(),main=document.querySelector('main'),card=$('.panel',main||document);if(!d||!card)return;
+    const f=$('.sales-form'),province=$('#sale-province'),bank=$('#sale-bank'),quantity=$('#cantidad_venta'),type=$('#tipo_sangre'),unitSelect=$('#sale-unit');if(!f)return;
+    maskCedula($('#buyer-document'));
+    bindProvinceBank(province,bank);const u=user();if(u){$('#buyer-name').value=`${u.first||''} ${u.last||''}`.trim();$('#buyer-email').value=u.email||'';$('#buyer-phone').value=u.phone||'';}
+    const basket=document.createElement('section');basket.className='panel cart-panel';basket.innerHTML=`<h2>Carrito de compra</h2><div id="cart-lines"></div><p id="cart-total" class="cart-total"></p><button class="btn" id="checkout" type="button">Continuar al pago</button>`;card.after(basket);
+    const buyerFields=[$('#buyer-name'),$('#buyer-email'),$('#buyer-phone'),province,bank];
+    function lockBuyer(locked){buyerFields.forEach(x=>{x.disabled=locked;});}
+    function refreshEstimate(){const selected=selectedBank(province.value,bank.value),amount=Number(quantity.value),ml=unitSelect.value==='liters'?amount*1000:amount,units=ml>0?Math.ceil(ml/450):0,base=selected?Number(selected.unit_price)||8000:0,price=base*(type.value.includes('-')?1.06:1);$('#sale-unit-price').textContent=selected?money(price):'Elige provincia y banco';$('#sale-estimate').textContent=units?money(units*price):'—';const preview=$('.price-preview');if(preview)preview.dataset.units=String(units);}
+    function fill(){const lines=$('#cart-lines');lines.innerHTML=d.cart.length?d.cart.map((x,i)=>`<div class="cart-item"><div class="cart-item-info"><strong>${esc(x.type)} · ${Number(x.volume_ml)||Number(x.units)*450} ml</strong><span class="sub">${Number(x.units)} unidad(es) × ${money(Number(x.unit_price)||Number(x.total)/Number(x.units))} · ${esc(x.bank||'Banco')}</span><span class="cart-line-total">${money(Number(x.total)||0)}</span></div><button class="btn btn-ghost" type="button" data-cart-del="${i}">Quitar</button></div>`).join(''):'<p class="empty-state">Tu carrito está vacío.</p>';$('#cart-total').textContent=`Total: ${money(d.cart.reduce((n,x)=>n+(Number(x.total)||0),0))}`;lockBuyer(d.cart.length>0);$('#checkout').disabled=!d.cart.length;}
+    function buyerDetails(){const name=$('#buyer-name').value.trim(),document=$('#buyer-document').value.replace(/\D/g,''),email=$('#buyer-email').value.trim(),phone=$('#buyer-phone').value.trim();if(!name||!validCedula(document)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||phone.replace(/\D/g,'').length<7||!province.value||!bank.value){toast('Completa nombre, cédula válida, correo, teléfono, provincia y banco antes de continuar.');return null;}return {buyer_name:name,buyer_document:document,buyer_email:email,buyer_phone:phone,province:province.value,bank:bank.value};}
+    d.cart=d.cart.map(x=>{if(x.unit_price)return x;const selected=selectedBank(province.value,bank.value),base=Number(selected?.unit_price)||8000,price=base*(String(x.type).includes('-')?1.06:1);return {...x,unit_price:price,total:Number(x.units)*price,bank:bank.value,province:province.value,volume_ml:Number(x.units)*450};});
+    [province,bank,type,quantity,unitSelect].forEach(el=>el.addEventListener('change',refreshEstimate));quantity.addEventListener('input',refreshEstimate);$('#btn-agregar-carrito').addEventListener('click',()=>{if(!gate())return;const details=buyerDetails();if(!details)return;const selected=selectedBank(province.value,bank.value),amount=Number(quantity.value),volumeMl=unitSelect.value==='liters'?amount*1000:amount;if(!selected||!Number.isFinite(volumeMl)||volumeMl<=0){toast('Indica una cantidad válida y elige un banco.');return}if(d.cart.length&&(d.cart[0].bank!==bank.value||d.cart[0].province!==province.value)){toast('El carrito debe corresponder a un solo banco.');return}const units=Math.ceil(volumeMl/450),price=Number(selected.unit_price)||8000,unitPrice=price*(type.value.includes('-')?1.06:1);d.cart.push({type:type.value,units,volume_ml:Math.round(volumeMl),unit_price:unitPrice,total:Math.round(units*unitPrice*100)/100,bank:bank.value,province:province.value});persist();fill();refreshEstimate();toast(`Agregado: ${units} unidad(es), ${money(units*unitPrice)}.`);});
+    $('#checkout').addEventListener('click',()=>{if(!d.cart.length){toast('Agrega productos al carrito primero.');return}if(!buyerDetails())return;const total=d.cart.reduce((n,x)=>n+Number(x.total),0),m=document.createElement('div');m.className='modal-overlay active';m.innerHTML=`<section class="modal-content"><button class="close-modal" type="button" aria-label="Cerrar">×</button><img class="payment-logo" src="assets/img/logo.svg" alt=""><h2>Finalizar compra</h2><p class="payment-total">Total estimado: <strong>${money(total)}</strong></p><p class="sub">Ordena ${d.cart.length} producto(s) de ${esc(d.cart[0].bank)}.</p><div class="payment-options"><button class="btn" type="button" data-pay="cashapp">Cash App</button><button class="btn" type="button" data-pay="paypal">PayPal</button><button class="btn" type="button" data-pay="debit">Tarjeta de débito</button><button class="btn" type="button" data-pay="credit">Tarjeta de crédito</button></div><p class="sub">El cobro en línea queda pendiente hasta conectar la cuenta comercial de la pasarela elegida.</p><div id="pay-info" aria-live="polite"></div></section>`;document.body.append(m);$('.close-modal',m).onclick=()=>m.remove();$$('[data-pay]',m).forEach(b=>b.addEventListener('click',()=>{if(serverMode)return;const buyer=buyerDetails();if(!buyer)return;const invoice=`BCRD-${new Date().toISOString().slice(0,10).replaceAll('-','')}-${Math.random().toString(36).slice(2,8).toUpperCase()}`,sale={invoice_number:invoice,total,status:'pending',payment_method:b.dataset.pay,...buyer,items:d.cart.map(x=>({...x}))};d.sales.unshift(sale);d.cart=[];persist();fill();$('#pay-info',m).textContent=`Orden ${invoice} registrada como pendiente. No se ha realizado ningún cargo.`;}));});
+    window.addEventListener('cartupdated',fill);fill();refreshEstimate();
+  }
+  async function reloadRemote(){await hydrate();statCards();renderDeposits();renderDonors();renderMovements();renderRequests();}
+  function wireServerForms(){
+    document.addEventListener('submit',async e=>{
+      if(!serverMode)return;const f=e.target;if(!['form-donante','form-mov','form-solicitud'].includes(f.id))return;
+      e.preventDefault();e.stopImmediatePropagation();if(!gate())return;
+      try{
+        if(f.id==='form-donante'){
+          const phone=f.elements.telefono.value;await api('donors',{name:f.elements.nombre.value.trim(),document:f.elements.cedula.value.replace(/\D/g,''),phone,dial:f.elements.telefono_dial.value,type:f.elements.tipo.value,province:f.elements.provincia.value,bank:f.elements.banco.value});
+        } else if(f.id==='form-mov'){
+          const type=f.elements.sangre.value,qty=+f.elements.unidades.value;
+          if(!Number.isInteger(qty)||qty<1)throw new Error('Indica una cantidad válida.');
+          if(f.elements.tipo.value==='Entrada'){
+            const donor=findDonor(data(),f.elements.donante.value);if(!donor)throw new Error('Selecciona un donante registrado antes de crear el depósito.');
+            if(donor.type!==type)throw new Error('El tipo de sangre debe coincidir con el registro del donante.');
+            const components={sangre_entera:'whole_blood',globulos_rojos:'red_cells',plaquetas:'platelets',plasma:'plasma'};
+            await api('deposits',{type,quantity:qty,donor_id:donor.id,component:components[f.elements.componente.value]||'whole_blood',bank:f.elements.banco.value,province:f.elements.provincia.value,collected:new Date().toISOString()});
+          } else await api('exit',{type,quantity:qty,reason:f.elements.motivo.value.trim(),province:f.elements.provincia.value,bank:f.elements.banco.value,patient_name:f.elements.patient_name.value.trim(),patient_document:f.elements.patient_document.value.replace(/\D/g,''),patient_dial:f.elements.patient_dial.value,patient_phone:f.elements.patient_phone.value.trim(),patient_authorized:f.elements.patient_authorized.checked});
+        } else {
+          const priorities={Baja:'low',Media:'medium',Alta:'high','Crítica':'critical'};
+          await api('requests',{hospital:f.elements.hospital.value,province:f.elements.provincia.value,type:f.elements.tipo.value,quantity:+f.elements.cantidad.value,priority:priorities[f.elements.prioridad.value]||'medium',patient_name:f.elements.patient_name.value.trim(),patient_document:f.elements.patient_document.value.replace(/\D/g,''),patient_dial:f.elements.patient_dial.value,patient_phone:f.elements.patient_phone.value.trim(),patient_authorized:f.elements.patient_authorized.checked});
+        }
+        f.reset();if(f.elements.banco)f.elements.banco.innerHTML=bankOptions('');if(f.elements.hospital)f.elements.hospital.innerHTML=bankOptions('');if(f.id==='form-mov'){const entry=f.elements.tipo.value==='Entrada';$('#campos-entrada').hidden=!entry;$('#campos-salida').hidden=entry;f.elements.donante.required=entry;for(const name of ['patient_name','patient_document','patient_phone','patient_authorized'])f.elements[name].required=!entry;f.elements.motivo.required=!entry;}await reloadRemote();toast('Cambios guardados en MariaDB.');
+      }catch(err){toast(err.message)}
+    },true);
+    document.addEventListener('click',async e=>{
+      const view=e.target.closest('[data-view-deposit]');if(view){e.preventDefault();e.stopImmediatePropagation();openDepositEditor(+view.dataset.viewDeposit);return;}
+      const edit=e.target.closest('[data-edit-deposit]');if(edit){e.preventDefault();e.stopImmediatePropagation();openDepositEditor(+edit.dataset.editDeposit);return;}
+      const del=e.target.closest('[data-del-deposit]'),cancel=e.target.closest('[data-cancel-request]');
+      if(serverMode&&del){e.preventDefault();e.stopImmediatePropagation();try{const dep=data()?.deposits[+del.dataset.delDeposit];if(!dep)throw new Error('Ese lote ya no existe.');await api('deposits',{operation:'delete',id:dep.id,type:dep.type,quantity:Math.max(1,+dep.quantity)});await reloadRemote();toast('Registro eliminado.')}catch(err){toast(err.message)}}
+      if(serverMode&&cancel){e.preventDefault();e.stopImmediatePropagation();try{const req=data()?.requests[+cancel.dataset.cancelRequest];if(!req)throw new Error('Esa solicitud ya no existe.');await api('requests',{operation:'cancel',id:req.id});await reloadRemote();toast('Solicitud cancelada.')}catch(err){toast(err.message)}}
+      const pay=e.target.closest('[data-pay]');if(serverMode&&pay){e.preventDefault();e.stopImmediatePropagation();try{const d=data(),buyer={buyer_name:$('#buyer-name').value.trim(),buyer_document:$('#buyer-document').value.replace(/\D/g,''),buyer_email:$('#buyer-email').value.trim(),buyer_phone:$('#buyer-phone').value.trim(),province:$('#sale-province').value,bank:$('#sale-bank').value},result=await api('sales',{payment_method:pay.dataset.pay,items:d.cart,...buyer});$('#pay-info').textContent=`Orden ${result.invoice_number} creada por ${money(result.total)}. Estado pendiente; el pago requiere la pasarela comercial configurada.`;d.sales.unshift({...result,invoice_number:result.invoice_number,total:result.total,payment_method:pay.dataset.pay});d.cart=[];persist();window.dispatchEvent(new Event('cartupdated'));}catch(err){$('#pay-info').textContent=err.message}}
+    },true);
+  }
+  document.addEventListener('DOMContentLoaded',async()=>{await hydrate();shell();const p=document.body.dataset.page;({index:initIndex,panel:initPanel,inventario:initInventory,donantes:initDonors,solicitudes:initRequests,reportes:initReports,ventas:initSales,configuracion:initSettings})[p]?.();wireServerForms();document.addEventListener('click',e=>{const view=e.target.closest('[data-view-deposit]');if(view){openDepositEditor(+view.dataset.viewDeposit)}const del=e.target.closest('[data-del-deposit]');if(del&&!serverMode){data().deposits.splice(+del.dataset.delDeposit,1);persist();renderDeposits();statCards()}const cancel=e.target.closest('[data-cancel-request]');if(cancel&&!serverMode){data().requests[+cancel.dataset.cancelRequest].status='Cancelada';persist();renderRequests();statCards()}const cart=e.target.closest('[data-cart-del]');if(cart){data().cart.splice(+cart.dataset.cartDel,1);persist();location.reload()}});const observer=new IntersectionObserver(entries=>entries.forEach(x=>{if(x.isIntersecting){x.target.classList.add('active');observer.unobserve(x.target)}}),{threshold:.08});$$('.panel,.tile,.stat,.hero,.carousel-wrapper').forEach(el=>{el.classList.add('reveal');observer.observe(el)});});
+})();
